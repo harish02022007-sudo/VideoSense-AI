@@ -1,0 +1,50 @@
+app:
+  env: "production"
+  debug: false
+  title: "VideoSense AI"
+  port: 8000
+  host: "0.0.0.0"
+
+database:
+  url: "postgresql://postgres:postgres@localhost:5432/videosense"
+  pool_size: 20
+  max_overflow: 30
+
+logging:
+  level: "INFO"
+  format: "json"
+  save_to_file: true
+  file_path: "./logs/production.log"
+
+storage:
+  upload_dir: "./uploads"
+  output_dir: "./outputs"
+  cache_dir: "./cache"
+  max_file_size_mb: 2000
+  allowed_extensions: ["mp4", "avi", "mov", "mkv"]
+
+models:
+  device: "cuda"  # Production uses CUDA acceleration by default
+  manager:
+    lazy_load: true
+    unload_inactive_after_sec: 600
+  yolo:
+    model_name: "yolo11s.pt"  # Small/Medium model for production accuracy
+    confidence_threshold: 0.35
+  whisper:
+    model_name: "base"
+    device: "cuda"
+  ocr:
+    lang: "en"
+    use_gpu: true
+  clip:
+    model_name: "sentence-transformers/clip-ViT-B-32"
+  llm:
+    provider: "local"  # Default to local Qwen 2.5 3B
+    local_model_path: "Qwen/Qwen2.5-3B-Instruct"
+    api_key: ""
+    temperature: 0.5
+
+cache:
+  ttl_seconds: 86400
+  enabled: true

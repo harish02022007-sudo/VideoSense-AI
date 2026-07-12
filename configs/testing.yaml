@@ -1,0 +1,49 @@
+app:
+  env: "testing"
+  debug: false
+  title: "VideoSense AI (Test)"
+  port: 8001
+  host: "127.0.0.1"
+
+database:
+  url: "sqlite:///./videosense_test.db"
+  pool_size: 5
+  max_overflow: 5
+
+logging:
+  level: "WARNING"
+  format: "text"
+  save_to_file: false
+
+storage:
+  upload_dir: "./uploads_test"
+  output_dir: "./outputs_test"
+  cache_dir: "./cache_test"
+  max_file_size_mb: 10
+  allowed_extensions: ["mp4"]
+
+models:
+  device: "cpu"
+  manager:
+    lazy_load: true
+    unload_inactive_after_sec: 10
+  yolo:
+    model_name: "yolo11n.pt"
+    confidence_threshold: 0.50
+  whisper:
+    model_name: "tiny"
+    device: "cpu"
+  ocr:
+    lang: "en"
+    use_gpu: false
+  clip:
+    model_name: "sentence-transformers/clip-ViT-B-32"
+  llm:
+    provider: "mock"
+    local_model_path: ""
+    api_key: ""
+    temperature: 0.0
+
+cache:
+  ttl_seconds: 10
+  enabled: false

@@ -1,0 +1,142 @@
+# =========================================================
+# VideoSense AI - Git Ignore
+# =========================================================
+
+############################
+# Python
+############################
+__pycache__/
+*.py[cod]
+*$py.class
+
+backend/.venv/
+backend/venv/
+backend/env/
+
+############################
+# Environment Variables
+############################
+.env
+.env.*
+!.env.example
+
+############################
+# Python Build
+############################
+build/
+dist/
+*.egg-info/
+
+############################
+# Node
+############################
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+############################
+# React / Vite
+############################
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+############################
+# IDE
+############################
+.vscode/
+.idea/
+
+############################
+# OS
+############################
+Thumbs.db
+.DS_Store
+
+############################
+# Logs
+############################
+logs/
+*.log
+
+############################
+# Cache
+############################
+cache/
+artifacts/
+.pytest_cache/
+.mypy_cache/
+
+############################
+# Database
+############################
+*.db
+*.sqlite3
+
+############################
+# ML Models
+############################
+models/
+weights/
+checkpoints/
+*.pt
+*.pth
+*.onnx
+
+############################
+# Vector Databases
+############################
+faiss_index/
+chroma_db/
+vector_store/
+
+############################
+# Temporary Files
+############################
+temp/
+tmp/
+*.tmp
+
+############################
+# Jupyter
+############################
+.ipynb_checkpoints/
+
+############################
+# Installation Logs
+############################
+*_log.txt
+install_log.txt
+
+############################
+# Video Data
+############################
+uploads/
+processed_videos/
+frames/
+extracted_frames/
+
+############################
+# Testing
+############################
+.coverage
+htmlcov/
+
+############################
+# Frontend Environment
+############################
+frontend/.env
+frontend/.env.*
+
+############################
+# Docker Local Overrides
+############################
+docker-compose.override.yml
+
+frontend_temp/
+
+############################
+# Logs / Installation
+############################
+*_log.txt
+install_log.txt

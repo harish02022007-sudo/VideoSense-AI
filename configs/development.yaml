@@ -1,0 +1,50 @@
+app:
+  env: "development"
+  debug: true
+  title: "VideoSense AI (Dev)"
+  port: 8000
+  host: "0.0.0.0"
+
+database:
+  url: "sqlite:///./videosense.db"
+  pool_size: 5
+  max_overflow: 10
+
+logging:
+  level: "DEBUG"
+  format: "json"
+  save_to_file: true
+  file_path: "./logs/development.log"
+
+storage:
+  upload_dir: "./uploads"
+  output_dir: "./outputs"
+  cache_dir: "./cache"
+  max_file_size_mb: 500
+  allowed_extensions: ["mp4", "avi", "mov", "mkv"]
+
+models:
+  device: "cpu"  # Change to "cuda" if Nvidia GPU is available
+  manager:
+    lazy_load: true
+    unload_inactive_after_sec: 300
+  yolo:
+    model_name: "yolo11n.pt"  # Nano model for fast CPU processing
+    confidence_threshold: 0.25
+  whisper:
+    model_name: "tiny"
+    device: "cpu"
+  ocr:
+    lang: "en"
+    use_gpu: false
+  clip:
+    model_name: "sentence-transformers/clip-ViT-B-32"
+  llm:
+    provider: "mock"  # Options: local, openai, gemini, anthropic, mock
+    local_model_path: "Qwen/Qwen2.5-3B-Instruct"
+    api_key: ""
+    temperature: 0.7
+
+cache:
+  ttl_seconds: 3600
+  enabled: true
