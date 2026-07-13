@@ -72,6 +72,8 @@ artifacts/
 ############################
 *.db
 *.sqlite3
+*.db-journal
+*.sqlite3-journal
 
 ############################
 # ML Models

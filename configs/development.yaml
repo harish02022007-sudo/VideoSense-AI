@@ -6,7 +6,7 @@ app:
   host: "0.0.0.0"
 
 database:
-  url: "sqlite:///./videosense.db"
+  url: "postgresql://postgres:Hari_007@localhost:5432/VideoSense_AI"
   pool_size: 5
   max_overflow: 10
 
