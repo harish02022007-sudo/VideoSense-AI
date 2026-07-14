@@ -10,7 +10,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.core.config import settings
 from app.database.session import Base
 # Import all database models here to register metadata with Base
-from app.models.analysis import Video, Job
+from app.models.analysis import Video, Job, Frame, OCRResult, Transcript, Scene, Object, Audio, FaceDetection
+from app.models.pipeline import PipelineExecution
+from app.models.model_registry import ModelRegistry
+from app.models.processing_log import ProcessingLog
+from app.models.processing_config import VideoProcessingConfig
+from app.models.embedding import VideoEmbedding
+from app.models.worker import Worker
 
 config = context.config
 

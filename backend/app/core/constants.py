@@ -16,17 +16,23 @@ class JobStatus(str, Enum):
 
 # Pipeline Stages
 class PipelineStage(str, Enum):
-    VALIDATING = "validating"
     METADATA = "metadata"
     FRAME_EXTRACTION = "frame_extraction"
     AUDIO_EXTRACTION = "audio_extraction"
-    OBJECT_DETECTION = "object_detection"
-    OCR = "ocr"
-    FACE_DETECTION = "face_detection"
-    TRANSCRIPTION = "transcription"
     SCENE_DETECTION = "scene_detection"
-    TIMELINE = "timeline"
-    SUMMARY = "summary"
+    OCR = "ocr"
+    SPEECH = "speech"
+    OBJECT_DETECTION = "object_detection"
+    FACE_DETECTION = "face_detection"
+    EMBEDDING = "embedding"
+    COMPLETED = "completed"
+
+# Embedding Types
+class EmbeddingType(str, Enum):
+    VIDEO = "VIDEO"
+    FRAME = "FRAME"
+    TEXT = "TEXT"
+    AUDIO = "AUDIO"
 
 # Unified Error Codes
 class ErrorCodes(str, Enum):

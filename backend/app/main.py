@@ -6,6 +6,7 @@ from app.api.v1.router import api_router
 from app.middleware.correlation import CorrelationIdMiddleware
 from app.middleware.exception_handler import global_exception_handler
 from app.core.logging import get_logger
+from app.workers.worker_manager import WorkerManager
 
 logger = get_logger("app")
 
@@ -16,6 +17,10 @@ app = FastAPI(
     version="1.0.0",
     debug=settings.app.debug
 )
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    await WorkerManager.start_worker()
 
 # Configure CORS middleware
 app.add_middleware(
