@@ -1,17 +1,22 @@
 import shutil
-import subprocess
 from typing import Dict, Any, List
+
 from fastapi import APIRouter, Request
 from sqlalchemy import text
+
 from app.db.unit_of_work import UnitOfWork
 from app.schemas.common import ResponseEnvelope
 
+
 router = APIRouter()
+
 
 @router.get("/health", response_model=ResponseEnvelope[Dict[str, Any]])
 async def check_health(request: Request):
-    """Executes verification diagnostics on DB connectivity, FFmpeg paths, and storage files writing."""
+    """Executes verification diagnostics on DB connectivity, FFmpeg paths, and storage write access."""
+
     request_id = getattr(request.state, "request_id", "N/A")
+
     health_status = {
         "status": "healthy",
         "database": "online",
@@ -19,25 +24,23 @@ async def check_health(request: Request):
         "storage": "writable"
     }
 
-    # 1. Verify Database
+    # Database verification
     try:
         with UnitOfWork() as uow:
-            uow.session.execute(text("SELECT 1") if "text" in globals() else sa_text("SELECT 1"))
-    except Exception:
-        # Fallback raw check
-        try:
-            from sqlalchemy import text
-            with UnitOfWork() as uow:
-                uow.session.execute(text("SELECT 1"))
-        except Exception:
-            health_status["database"] = "offline"
-            health_status["status"] = "unhealthy"
+            uow.session.execute(text("SELECT 1"))
 
-    # 2. Verify FFmpeg path
+    except Exception:
+        health_status["database"] = "offline"
+        health_status["status"] = "unhealthy"
+
+
+    # FFmpeg verification
     ffmpeg_path = shutil.which("ffmpeg")
+
     if not ffmpeg_path:
         health_status["ffmpeg"] = "missing"
         health_status["status"] = "unhealthy"
+
 
     return ResponseEnvelope(
         success=True,
@@ -49,10 +52,14 @@ async def check_health(request: Request):
 
 @router.get("/models", response_model=ResponseEnvelope[List[Dict[str, Any]]])
 async def get_system_models(request: Request):
-    """Resolves running deep learning model registration rows."""
+    """Returns registered AI model telemetry from the model registry."""
+
     request_id = getattr(request.state, "request_id", "N/A")
+
     with UnitOfWork() as uow:
+
         db_models = uow.model_registry.list()
+
         models_data = [
             {
                 "id": m.id,
@@ -65,7 +72,8 @@ async def get_system_models(request: Request):
             }
             for m in db_models
         ]
-        
+
+
     return ResponseEnvelope(
         success=True,
         message="Active AI model telemetry retrieved successfully.",

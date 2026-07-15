@@ -7,6 +7,7 @@ from app.middleware.correlation import CorrelationIdMiddleware
 from app.middleware.exception_handler import global_exception_handler
 from app.core.logging import get_logger
 from app.workers.worker_manager import WorkerManager
+from app.mlops.model_registry import initialize_model_registry
 
 logger = get_logger("app")
 
@@ -20,7 +21,16 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event() -> None:
+
+    initialize_model_registry()
+    logger.info(
+        "Model registry initialized"
+    )
+
     await WorkerManager.start_worker()
+    logger.info(
+        "WorkerManager started"
+    )
 
 # Configure CORS middleware
 app.add_middleware(

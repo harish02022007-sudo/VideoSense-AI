@@ -13,6 +13,9 @@ from app.processing.progress_tracker import ProgressTracker
 from app.processing.checkpoints import CheckpointManager
 from app.processing.error_handler import PipelineErrorHandler
 from app.processing.events import PipelineEventBus, ProcessingStartedEvent, StageCompletedEvent
+from app.core.logging import get_logger
+
+logger = get_logger("app.processing.pipeline")
 
 class PipelineService:
     """Orchestrates sequential AI ingestion pipelines, handling checkpoint saves and database integrations."""
@@ -344,3 +347,14 @@ class PipelineService:
         # -------------------------------------------------------------
         stage = PipelineStage.COMPLETED
         ProgressTracker.update_stage_progress(context, stage, 9, elapsed)
+
+        logger.info(
+            f"Pipeline completed successfully for job {job_id}"
+        )
+
+        with UnitOfWork() as uow:
+            job = uow.jobs.get(job_id)
+            if job:
+                job.status = "completed"
+                job.completed_at = datetime.utcnow()
+            uow.commit()

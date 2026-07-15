@@ -37,8 +37,8 @@ def check_health(db: Session = Depends(get_db_session)) -> Dict[str, Any]:
         
     # 3. Model Loading Health (Stubbed until ModelManager is active)
     model_status = {
-        "device": settings.models.device,
-        "manager_mode": "lazy" if settings.models.manager.lazy_load else "eager",
+        "device": settings.providers.device,
+        "manager_mode": "lazy",
         "active_models": [],
         "ram_footprint_mb": 0.0
     }

@@ -11,14 +11,18 @@ logger = get_logger("app.workers.manager")
 
 class WorkerManager:
     """Manages active job queues, worker registrations, and runs pipeline tasks in a background thread."""
-    _queue: asyncio.Queue = asyncio.Queue()
+    _queue: asyncio.Queue = None
     _active_worker_id: Optional[str] = None
     _worker_loop_task: Optional[asyncio.Task] = None
+    _loop: asyncio.AbstractEventLoop | None = None
 
     @classmethod
     async def start_worker(cls) -> None:
         """Registers a worker record and starts polling the job queue."""
+        cls._loop = asyncio.get_running_loop()
+        cls._queue = asyncio.Queue()
         cls._active_worker_id = f"worker_{str(uuid.uuid4())[:8]}"
+        
         logger.info(f"Starting background worker: {cls._active_worker_id}")
 
         with UnitOfWork() as uow:
@@ -45,6 +49,27 @@ class WorkerManager:
             "job_id": job_id,
             "config": config
         })
+
+    @classmethod
+    def enqueue_job_threadsafe(
+        cls,
+        video_id: str,
+        job_id: str,
+        config: Dict[str, Any]
+    ) -> None:
+        """
+        Safely enqueue a job from a non-async thread.
+        """
+
+        if cls._loop is None:
+            raise RuntimeError("Worker event loop has not been initialized.")
+
+        future = asyncio.run_coroutine_threadsafe(
+            cls.enqueue_job(video_id, job_id, config),
+            cls._loop
+        )
+
+        future.result()
 
     @classmethod
     async def _worker_loop(cls) -> None:
