@@ -1,25 +1,51 @@
+import os
 import time
 import uuid
 from datetime import datetime
 from typing import Dict, Any, List
+
+from app.core.config import settings
 from app.core.container import Container
-from app.core.constants import PipelineStage, JobStatus
 from app.db.unit_of_work import UnitOfWork
-from app.models.analysis import Video, Job, Frame, OCRResult, Transcript, Scene, Object, Audio, FaceDetection
-from app.models.pipeline import PipelineExecution
-from app.models.embedding import VideoEmbedding
+from app.models.processing_log import ProcessingLog
+from app.core.constants import PipelineStage, JobStatus
 from app.processing.pipeline_context import PipelineContext
 from app.processing.progress_tracker import ProgressTracker
 from app.processing.checkpoints import CheckpointManager
 from app.processing.error_handler import PipelineErrorHandler
 from app.processing.events import PipelineEventBus, ProcessingStartedEvent, StageCompletedEvent
 from app.core.logging import get_logger
+from app.models.analysis import Video, Job, Frame, OCRResult, Transcript, Scene, Object, Audio, FaceDetection
+from app.models.pipeline import PipelineExecution
+from app.models.embedding import VideoEmbedding
 
 logger = get_logger("app.processing.pipeline")
 
 class PipelineService:
     """Orchestrates sequential AI ingestion pipelines, handling checkpoint saves and database integrations."""
-    
+
+    @staticmethod
+    def create_processing_log(
+        video_id: str,
+        job_id: str,
+        stage: str
+    ):
+        with UnitOfWork() as uow:
+            log = ProcessingLog(
+                id=str(uuid.uuid4()),
+                video_id=video_id,
+                job_id=job_id,
+                stage=stage,
+                level="INFO",
+                message=f"{stage} completed successfully",
+                log_metadata={
+                    "stage": stage,
+                    "status": "completed"
+                }
+            )
+            uow.processing_logs.add(log)
+            uow.commit()
+
     @classmethod
     def execute_pipeline(
         cls,
@@ -92,6 +118,12 @@ class PipelineService:
             context, stage, 1, "SUCCESS", 0, 10, elapsed, metadata=meta
         )
 
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "metadata_completed"
+        )
+
         # -------------------------------------------------------------
         # STAGE 2: FRAME EXTRACTION (FFmpeg Slices)
         # -------------------------------------------------------------
@@ -99,14 +131,15 @@ class PipelineService:
         ProgressTracker.update_stage_progress(context, stage, 2)
         start_time = time.time()
 
-        frames_dir = os.path.join(os.path.dirname(video_path), "frames") if "os" in globals() else f"./uploads/{video_id}/frames"
-        import os
-        frames_dir = os.path.abspath(os.path.join(settings.storage.upload_dir if "settings" in globals() else "./uploads", video_id, "frames"))
+        frames_dir = os.path.abspath(
+            os.path.join(
+                settings.storage.upload_dir,
+                video_id,
+                "frames"
+            )
+        )
         
-        # Override directory mapping safely
-        from app.core.config import settings
-        frames_dir = os.path.abspath(os.path.join(settings.storage.upload_dir, video_id, "frames"))
-        
+        os.makedirs(frames_dir, exist_ok=True)
         frame_extractor = Container.get_frame_extractor()
         interval = config.get("frame_interval", 1.0)
         frame_res = frame_extractor.extract_frames(video_path, frames_dir, interval)
@@ -139,6 +172,12 @@ class PipelineService:
             context, stage, 2, "SUCCESS", 10, 25, elapsed, metadata={"frames_count": len(frame_paths)}
         )
 
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "frames_completed"
+        )
+
         # -------------------------------------------------------------
         # STAGE 3: AUDIO EXTRACTION (FFmpeg Strip)
         # -------------------------------------------------------------
@@ -147,6 +186,8 @@ class PipelineService:
         start_time = time.time()
 
         audio_wav = os.path.abspath(os.path.join(settings.storage.upload_dir, video_id, "audio", "audio.wav"))
+        os.makedirs(os.path.dirname(audio_wav), exist_ok=True)
+
         audio_extractor = Container.get_audio_extractor()
         audio_res = audio_extractor.extract_audio(video_path, audio_wav)
         elapsed = int((time.time() - start_time) * 1000)
@@ -170,6 +211,12 @@ class PipelineService:
 
         CheckpointManager.save_checkpoint(
             context, stage, 3, "SUCCESS", 25, 40, elapsed, metadata={"audio_path": audio_wav}
+        )
+
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "audio_completed"
         )
 
         # -------------------------------------------------------------
@@ -204,6 +251,12 @@ class PipelineService:
             context, stage, 4, "SUCCESS", 40, 55, elapsed, metadata={"scenes_count": len(scenes_list)}
         )
 
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "scene_completed"
+        )
+
         # -------------------------------------------------------------
         # STAGE 5: OCR SCAN (EasyOCR scans)
         # -------------------------------------------------------------
@@ -220,6 +273,10 @@ class PipelineService:
             return
 
         ocr_list = ocr_res.value
+        logger.info(
+            f"OCR detected {len(ocr_list)} text regions for video {video_id}"
+        )
+        
         with UnitOfWork() as uow:
             # Map ocr frame path back to saved frame entity ID
             db_frames = uow.frames.get_by_video_id(video_id)
@@ -245,6 +302,12 @@ class PipelineService:
 
         CheckpointManager.save_checkpoint(
             context, stage, 5, "SUCCESS", 55, 70, elapsed, metadata={"ocr_count": len(ocr_list)}
+        )
+
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "ocr_completed"
         )
 
         # -------------------------------------------------------------
@@ -280,6 +343,12 @@ class PipelineService:
 
         CheckpointManager.save_checkpoint(
             context, stage, 6, "SUCCESS", 70, 82, elapsed, metadata={"transcripts_count": len(speech_list)}
+        )
+
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "speech_completed"
         )
 
         # -------------------------------------------------------------
@@ -326,8 +395,64 @@ class PipelineService:
             context, stage, 7, "SUCCESS", 82, 94, elapsed, metadata={"objects_count": len(objects_list)}
         )
 
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "objects_completed"
+        )
+
+
         # -------------------------------------------------------------
-        # STAGE 8: FACE DETECTION & EMBEDDING PLACEHOLDERS
+        # STAGE 8: PREVIEW & THUMBNAIL GENERATION
+        # -------------------------------------------------------------
+        stage = PipelineStage.PREVIEW_GENERATION
+        ProgressTracker.update_stage_progress(context, stage, 8)
+        start_time = time.time()
+
+        preview_generator = Container.get_preview_generator()
+
+        preview_res = preview_generator.generate_preview(
+            video_id,
+            video_path
+        )
+
+        elapsed = int((time.time() - start_time) * 1000)
+
+        if not preview_res.success:
+            PipelineErrorHandler.handle_stage_failure(
+                context,
+                stage,
+                8,
+                "PREVIEW_GENERATION_FAILED",
+                preview_res.error,
+                elapsed
+            )
+            return
+
+        preview_data = preview_res.value
+
+        context.add_artifact("thumbnail", preview_data["thumbnail"])
+        context.add_artifact("preview_video", preview_data["preview_video"])
+
+        CheckpointManager.save_checkpoint(
+            context,
+            stage,
+            8,
+            "SUCCESS",
+            94,
+            98,
+            elapsed,
+            metadata=preview_data
+        )
+
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "preview_completed"
+        )
+
+        # -------------------------------------------------------------
+        # STAGE 9: FACE DETECTION & EMBEDDING PLACEHOLDERS
         # -------------------------------------------------------------
         # Add basic placeholder entries for vectors & face bounding box architecture readiness
         with UnitOfWork() as uow:
@@ -343,13 +468,19 @@ class PipelineService:
             uow.commit()
 
         # -------------------------------------------------------------
-        # STAGE 9: COMPLETED
+        # STAGE 10: COMPLETED
         # -------------------------------------------------------------
         stage = PipelineStage.COMPLETED
-        ProgressTracker.update_stage_progress(context, stage, 9, elapsed)
+        ProgressTracker.update_stage_progress(context, stage, 10, elapsed)
 
         logger.info(
             f"Pipeline completed successfully for job {job_id}"
+        )
+
+        cls.create_processing_log(
+            video_id,
+            job_id,
+            "pipeline_completed"
         )
 
         with UnitOfWork() as uow:

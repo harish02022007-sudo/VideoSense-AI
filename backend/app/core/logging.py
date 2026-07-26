@@ -29,7 +29,10 @@ def get_logger(name: str) -> logging.Logger:
     """Returns a logger instance configured with console and rotating file logs."""
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, settings.logging.level.upper(), logging.INFO))
-    
+
+    # Prevent messages from propagating to the root logger
+    logger.propagate = False
+
     # Avoid duplicate handlers if already initialized
     if logger.handlers:
         return logger

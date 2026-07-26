@@ -24,6 +24,7 @@ class PipelineStage(str, Enum):
     SPEECH = "speech"
     OBJECT_DETECTION = "object_detection"
     FACE_DETECTION = "face_detection"
+    PREVIEW_GENERATION = "preview_generation"
     EMBEDDING = "embedding"
     COMPLETED = "completed"
 

@@ -27,6 +27,9 @@ class WhisperSpeechRecognizer(ISpeechRecognizer):
             return Result.Failure(f"Whisper model load failed: {str(e)}")
 
     def transcribe(self, audio_path: str) -> Result[List[Dict[str, Any]]]:
+
+        logger.info(f"Whisper initialized: {self._initialized}")
+        
         if not self._initialized:
             self.initialize()
 
@@ -55,7 +58,11 @@ class WhisperSpeechRecognizer(ISpeechRecognizer):
             return Result.Success(mock_segments)
 
         try:
-            segments, info = self.model.transcribe(audio_path, beam_size=5)
+            segments, info = self.model.transcribe(audio_path, beam_size=5, language = "en")
+
+            logger.info(f"Detected language: {info.language}")
+            logger.info(f"Language probability: {info.language_probability}")
+            
             transcripts = []
             for segment in segments:
                 # Convert start and end times to milliseconds
