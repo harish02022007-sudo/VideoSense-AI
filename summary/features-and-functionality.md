@@ -104,30 +104,37 @@ VideoSense AI Platform
 
 ---
 
-### 3.2 Semantic Search Console
-* **File Reference**: [SemanticSearchConsole.jsx](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/frontend/src/components/search/SemanticSearchConsole.jsx)
-* **Purpose**: Cross-modal neural search engine allowing operators to discover specific video moments using natural language descriptions, spoken keywords, or visual concepts.
+### 3.2 Semantic Search & Natural Language Timestamp Retrieval
+* **File Reference**: [SemanticSearchConsole.jsx](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/frontend/src/components/search/SemanticSearchConsole.jsx), [search.py](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/backend/app/api/v1/endpoints/search.py), [agent_orchestrator.py](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/backend/app/ai_agents/agent_orchestrator.py)
+* **Purpose**: Cross-modal neural search engine allowing operators to discover specific video moments using open-vocabulary natural language descriptions (e.g. *"Where did I leave my red backpack?"*, *"Find the moment a dog runs across the street"*), spoken keywords, or visual concepts.
+* **Underlying Agentic Orchestration**:
+  * An **Agent Orchestrator** parses the query syntax to identify intent:
+    * Questions about dialog route with priority to **Audio Transcripts** (Acoustic layer).
+    * Questions about signage, license plates, or badges route to **OCR Streams** (Spatial text layer).
+    * Descriptive visual actions route to **Keyframe Vector Embeddings & Object Reticles** (Vision layer).
+    * Complex queries trigger **Hybrid Multi-Vector Fusion** across all three modalities concurrently.
 * **User Experience & Interactions**:
-  * **Universal Search Input**: Search bar with real-time query parsing supporting natural language queries (e.g., *"workers wearing safety gear"*, *"scene with emergency vehicle"*, *"store signage"*).
+  * **Universal Search Input**: Search bar with real-time query parsing supporting natural language queries.
   * **Modality Filter Chips**: Toggle buttons allowing users to scope retrieval across:
-    * `All Modalities` (Unified hybrid ranking)
+    * `All Modalities` (Unified hybrid ranking combining vision + audio + OCR)
     * `Visual Entities` (Visual detections only)
     * `Spoken Audio` (Speech transcripts only)
     * `Screen Text` (OCR extractions only)
   * **Video Scope Selector**: Allows searching globally across the entire video library or constraining queries to a specific video.
-  * **Result Cards**: Rich cards displaying keyframe thumbnails, timestamp chips (`[00:14]`), relevance score meters (`96% Match`), matched modalities, and snippet excerpts.
+  * **Precise Timestamp Result Cards**: Rich cards displaying keyframe thumbnails, exact timestamp intervals (`[01:12 - 01:18]`), relevance score meters (`96% Match`), matched modalities, and snippet excerpts.
   * **Instant Playback Jump**: Clicking any result card navigates directly to the Timeline Explorer and automatically seeks to the exact millisecond of the match.
 
 ---
 
-### 3.3 AI Video Chat & Copilot
-* **File Reference**: [VideoChatPanel.jsx](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/frontend/src/components/chat/VideoChatPanel.jsx)
-* **Purpose**: Conversational video intelligence powered by Retrieval-Augmented Generation (RAG). Operators can query video context, generate summaries, and investigate incidents.
+### 3.3 AI Video Chat & Multimodal Copilot
+* **File Reference**: [VideoChatPanel.jsx](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/frontend/src/components/chat/VideoChatPanel.jsx), [chat.py](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/backend/app/api/v1/endpoints/chat.py), [video_understanding.py](file:///d:/VsCode/Sem%20Project/Sem%205%20Project/Proj/VideoSense%20AI/backend/app/services/video_understanding.py)
+* **Purpose**: Conversational video intelligence powered by a true Multimodal Understanding Engine. Rather than simply listing isolated labels, the system synthesizes visual detections, acoustic speech, OCR text, and temporal duration into coherent narrative understanding.
 * **User Experience & Interactions**:
   * **AI Persona Selector**: Toggle between specialized analytical personas:
     * *Surveillance & Security Analyst*: Rigorous chronological audit with spatial coordinates and timestamps.
     * *Executive Briefing Specialist*: Concise high-level summaries and action items.
     * *Forensic Investigator*: Detailed entity tracking, anomalies, and safety compliance checks.
+  * **Narrative Scene Synthesis**: Generates full natural language stories explaining what is happening chronologically across the video.
   * **Factual Citations & Timestamp Verification**: Every AI response cites precise timestamps (e.g., `[00:08] (8.0s)`) and entity confidence ratings.
   * **Interactive Citation Cards**: Clicking citations renders a floating preview thumbnail and seeks the video player to the exact frame.
   * **One-Click Video Summarization**: Preset buttons to generate instant comprehensive summaries of the entire video or specific chapters.

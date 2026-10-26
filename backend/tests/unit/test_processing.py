@@ -28,7 +28,7 @@ class MockMetadataService(IMetadataService):
         })
 
 class MockFrameExtractor(IFrameExtractor):
-    def extract_frames(self, video_path: str, output_dir: str, interval_sec: float) -> Result[List[str]]:
+    def extract_frames(self, video_path: str, output_dir: str, interval_sec: float, *args, **kwargs) -> Result[List[str]]:
         os.makedirs(output_dir, exist_ok=True)
         # Write dummy files to allow list_artifacts scan checks to pass
         f1 = os.path.join(output_dir, "frame_00001.jpg")
@@ -38,6 +38,7 @@ class MockFrameExtractor(IFrameExtractor):
         with open(f2, "w") as f:
             f.write("")
         return Result.Success([f1, f2])
+
 
 class MockAudioExtractor(IAudioExtractor):
     def extract_audio(self, video_path: str, output_wav_path: str) -> Result[str]:
@@ -105,7 +106,7 @@ class MockSpeechRecognizer(ISpeechRecognizer):
         ])
 
 class MockObjectDetector(IObjectDetector):
-    def detect_objects(self, frame_paths: List[str]) -> Result[List[Any]]:
+    def detect_objects(self, frame_paths: List[str], *args, **kwargs) -> Result[List[Any]]:
         return Result.Success([
             {
                 "frame_path": frame_paths[0],
@@ -178,12 +179,15 @@ def test_complete_processing_flow():
             assert process_res.json()["success"] is True
 
             # Wait for the background worker loop to process the queue items
-            time.sleep(2.0)
+            status_data = {}
+            for _ in range(15):
+                status_res = client.get(f"/api/v1/videos/{video_id}/processing")
+                assert status_res.status_code == 200
+                status_data = status_res.json()["data"]
+                if status_data.get("status") in ("completed", "failed"):
+                    break
+                time.sleep(0.5)
 
-            # 6. Check Job Status & Progress Tracker
-            status_res = client.get(f"/api/v1/videos/{video_id}/processing")
-            assert status_res.status_code == 200
-            status_data = status_res.json()["data"]
             assert status_data["status"] == "completed"
             assert status_data["progress"] == 100
 

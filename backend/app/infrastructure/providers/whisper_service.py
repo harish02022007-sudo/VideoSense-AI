@@ -57,24 +57,36 @@ class WhisperSpeechRecognizer(ISpeechRecognizer):
             ]
             return Result.Success(mock_segments)
 
+        import math
         try:
-            segments, info = self.model.transcribe(audio_path, beam_size=5, language = "en")
+            # Auto-detect language and transcribe with beam_size=5
+            segments, info = self.model.transcribe(audio_path, beam_size=5)
 
-            logger.info(f"Detected language: {info.language}")
-            logger.info(f"Language probability: {info.language_probability}")
+            detected_lang = getattr(info, "language", "en")
+            lang_prob = getattr(info, "language_probability", 1.0)
+            logger.info(f"Detected speech language: {detected_lang} (probability: {lang_prob:.2f})")
             
             transcripts = []
             for segment in segments:
-                # Convert start and end times to milliseconds
+                text_clean = segment.text.strip()
+                if not text_clean:
+                    continue
+                # avg_logprob is typically negative; exp(avg_logprob) gives normalized [0, 1] confidence
+                raw_prob = math.exp(segment.avg_logprob) if hasattr(segment, "avg_logprob") and segment.avg_logprob is not None else 0.95
+                confidence = float(min(1.0, max(0.05, round(raw_prob, 4))))
+
                 transcripts.append({
-                    "text": segment.text.strip(),
-                    "confidence": float(segment.avg_logprob),  # Approximate confidence mapping
-                    "start_time_ms": float(segment.start * 1000.0),
-                    "end_time_ms": float(segment.end * 1000.0),
+                    "text": text_clean,
+                    "confidence": confidence,
+                    "start_time_ms": float(round(segment.start * 1000.0, 1)),
+                    "end_time_ms": float(round(segment.end * 1000.0, 1)),
                     "speaker_label": "speaker_unknown",
-                    "language": info.language
+                    "language": detected_lang
                 })
+
+            logger.info(f"Whisper transcribed {len(transcripts)} speech segments successfully.")
             return Result.Success(transcripts)
         except Exception as e:
             logger.error(f"Whisper transcription exception: {str(e)}")
             return Result.Failure(f"Whisper transcription exception: {str(e)}")
+

@@ -154,8 +154,14 @@ class PipelineService:
         # Register Frame rows in database
         with UnitOfWork() as uow:
             for idx, fp in enumerate(frame_paths):
-                # Calculate simple timestamp offset from frame index and interval
-                timestamp_offset = idx * interval * 1000.0
+                # Calculate accurate timestamp offset from extracted frame sequence index
+                try:
+                    num_part = os.path.basename(fp).split("_")[1].split(".")[0]
+                    seq_num = int(num_part)
+                    timestamp_offset = max(0.0, (seq_num - 1) * interval * 1000.0)
+                except Exception:
+                    timestamp_offset = idx * interval * 1000.0
+
                 frame_entity = Frame(
                     id=str(uuid.uuid4()),
                     video_id=video_id,

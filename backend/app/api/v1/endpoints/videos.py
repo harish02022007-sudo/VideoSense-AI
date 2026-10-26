@@ -17,6 +17,7 @@ from app.db.unit_of_work import UnitOfWork
 
 from sqlalchemy import func
 from app.models.analysis import Video, Job, Object, OCRResult, Transcript, Frame
+from app.models.processing_config import VideoProcessingConfig
 
 from app.utils.validators import VideoValidator
 from app.utils.hashing import calculate_sha256

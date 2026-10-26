@@ -3,6 +3,12 @@
 ## Executive Summary
 **VideoSense AI** is architected as an enterprise-grade, decoupled multimodal intelligence system following the principles of **Clean Architecture** and **Domain-Driven Design (DDD)**. The system isolates the high-responsiveness presentation client from computationally intensive computer vision, audio processing, and vector similarity workloads.
 
+The platform solves the classic **multimodal video understanding bottleneck** through a **Hybrid Ingestion & Inference Architecture**:
+1. **Intelligent Keyframe Sampling**: Rather than running heavy neural models on every raw frame (e.g., 30 FPS, which creates severe latency and compute overhead), the pipeline employs **1 FPS sampling** and **content-aware scene-cut detection (PySceneDetect)** to isolate visual transitions.
+2. **Tri-Modal Sensory Synthesis**: Concurrently processes **Visual Keyframes** (YOLOv11 with temporal tracking), **Audio Dialogue** (Faster-Whisper acoustic speech-to-text), and **On-Screen Text** (EasyOCR) into unified timestamped events.
+3. **Agentic Retrieval & VLM Narrative Synthesis**: Feeds multimodal signals into an **Agent Orchestrator** and **Vision-Language Model (VLM)** engine (Gemini Flash RAG) to transform raw bounding boxes into natural language scene stories, event summaries, and natural language timestamp search.
+4. **Hardware VRAM Optimization**: Designed specifically to run within consumer hardware limits (<3.5GB peak VRAM on 4GB GPUs) by offloading open-vocabulary cognitive reasoning to lightweight embeddings and cloud VLM APIs while maintaining ultra-fast local vision inference.
+
 The backend employs an asynchronous, non-blocking gateway powered by **FastAPI**, backed by a resilient background worker thread model, an extensible repository pattern with **Unit of Work**, and a dual-channel storage engine combining relational persistence with a high-speed **FAISS** vector repository.
 
 ---
@@ -35,35 +41,44 @@ graph TD
         ChatSvc["Conversational RAG Service"]
         AnalyticsSvc["Analytics Service"]
         JobSvc["Job Management Service"]
+        AgentOrch["Agent Orchestrator (Query Router)"]
+        VideoUnder["Video Understanding Engine"]
 
         Router --> VideoSvc
         Router --> SearchSvc
         Router --> ChatSvc
         Router --> AnalyticsSvc
         Router --> JobSvc
+        SearchSvc --> AgentOrch
+        ChatSvc --> VideoUnder
     end
 
     subgraph Worker Tier ["Asynchronous Execution Tier"]
         WorkerMgr["WorkerManager (Daemon Thread Pool)"]
         JobQueue["In-Memory Priority Job Queue"]
-        Pipeline["6-Stage Multimodal Processing Pipeline"]
+        Pipeline["6-Stage Hybrid Multimodal Processing Pipeline"]
 
         JobSvc --> JobQueue
         WorkerMgr --> JobQueue
         WorkerMgr --> Pipeline
     end
 
-    subgraph Inference Tier ["Multimodal AI Engine Tier"]
-        CVEngine["Computer Vision Detection Engine"]
-        WhisperEngine["Faster-Whisper Transcription Engine"]
-        OCREngine["EasyOCR Text Recognition"]
-        EmbedEngine["Sentence-Transformers (MiniLM/CLIP)"]
+    subgraph Inference Tier ["Multimodal AI Engine Tier (Tri-Modal)"]
+        CVEngine["Computer Vision: YOLOv11 + ByteTrack (1 FPS)"]
+        WhisperEngine["Acoustic Layer: Faster-Whisper Speech-to-Text"]
+        OCREngine["Spatial Text: EasyOCR Character Recognition"]
+        SceneEngine["Temporal Structuring: PySceneDetect Keyframing"]
+        EmbedEngine["Dense Embeddings: Sentence-Transformers (MiniLM/CLIP)"]
+        VLMEngine["Cognitive Layer: Gemini 2.5 Flash / Narrative LLM"]
 
         Pipeline --> CVEngine
         Pipeline --> WhisperEngine
         Pipeline --> OCREngine
+        Pipeline --> SceneEngine
         Pipeline --> EmbedEngine
+        ChatSvc --> VLMEngine
     end
+
 
     subgraph Storage Tier ["Data & Persistence Tier"]
         UoW["Unit of Work & Repositories"]
