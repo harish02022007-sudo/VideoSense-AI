@@ -26,3 +26,20 @@ class VideoEmbeddingRepository(IVideoEmbeddingRepository):
 
     def get_by_video_id(self, video_id: str) -> List[VideoEmbedding]:
         return self.db.query(VideoEmbedding).filter(VideoEmbedding.video_id == video_id).all()
+
+    def create_embedding(self, entity: VideoEmbedding) -> VideoEmbedding:
+        return self.add(entity)
+
+    def get_by_video_and_type(self, video_id: str, embedding_type: str) -> Optional[VideoEmbedding]:
+        return self.db.query(VideoEmbedding).filter(
+            VideoEmbedding.video_id == video_id,
+            VideoEmbedding.embedding_type == embedding_type
+        ).first()
+
+    def delete_by_video_id(self, video_id: str) -> bool:
+        res = self.get_by_video_id(video_id)
+        if res:
+            for item in res:
+                self.db.delete(item)
+            return True
+        return False

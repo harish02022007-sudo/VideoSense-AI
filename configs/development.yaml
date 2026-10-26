@@ -48,3 +48,8 @@ models:
 cache:
   ttl_seconds: 3600
   enabled: true
+
+embeddings:
+  storage_path: "storage/embeddings"
+  text_model: "sentence-transformers/all-MiniLM-L6-v2"
+  vision_model: "openai/clip-vit-base-patch32"

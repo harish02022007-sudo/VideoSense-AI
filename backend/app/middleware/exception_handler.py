@@ -5,7 +5,7 @@ from app.core.exceptions import BaseAppException
 from app.schemas.common import ProblemDetails
 
 async def global_exception_handler(request: Request, exc: Exception) -> Response:
-    print(f"EXCEPTION CAPTURED: {type(exc)} (BaseAppException: {isinstance(exc, BaseAppException)})")
+    print(f"EXCEPTION CAPTURED: {type(exc)} (BaseAppException: {isinstance(exc, BaseAppException)}) - Message: {exc}")
     # Retrieve request correlation ID
     request_id = getattr(request.state, "request_id", "N/A")
     instance_path = request.url.path
@@ -22,6 +22,8 @@ async def global_exception_handler(request: Request, exc: Exception) -> Response
             error_code=exc.error_code.value,
             request_id=request_id
         )
+        data = error_details.model_dump()
+        data["message"] = exc.message
     else:
         # Generic unhandled exception
         status_code = 500
@@ -34,8 +36,10 @@ async def global_exception_handler(request: Request, exc: Exception) -> Response
             error_code="INTERNAL_ERROR",
             request_id=request_id
         )
+        data = error_details.model_dump()
+        data["message"] = "An unexpected internal server error occurred."
 
     return JSONResponse(
         status_code=status_code,
-        content=error_details.model_dump()
+        content=data
     )

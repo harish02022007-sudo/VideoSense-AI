@@ -25,7 +25,7 @@ class PipelineStage(str, Enum):
     OBJECT_DETECTION = "object_detection"
     FACE_DETECTION = "face_detection"
     PREVIEW_GENERATION = "preview_generation"
-    EMBEDDING = "embedding"
+    EMBEDDING_GENERATION = "embedding_generation"
     COMPLETED = "completed"
 
 # Embedding Types
@@ -34,6 +34,13 @@ class EmbeddingType(str, Enum):
     FRAME = "FRAME"
     TEXT = "TEXT"
     AUDIO = "AUDIO"
+    VIDEO_METADATA = "VIDEO_METADATA"
+
+# Embedding Statuses
+EMBEDDING_PENDING = "embedding_pending"
+EMBEDDING_PROCESSING = "embedding_processing"
+EMBEDDING_COMPLETED = "completed"
+EMBEDDING_FAILED = "failed"
 
 # Unified Error Codes
 class ErrorCodes(str, Enum):

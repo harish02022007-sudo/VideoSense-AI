@@ -28,11 +28,21 @@ import CommandPalette from "./components/ui/CommandPalette";
 import { ArrowLeft, Brain } from "lucide-react";
 
 export default function App() {
-  // Pre-App state manager: landing, auth, onboarding, app
-  const [appState, setAppState] = useState("landing");
+  // Pre-App state manager: landing, auth, onboarding, app (defaults to app so dashboard is immediately active)
+  const [appState, setAppState] = useState(() => {
+    return localStorage.getItem("videosense_app_state") || "app";
+  });
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedVideoId, setSelectedVideoId] = useState(null);
+  const [initialSeekTime, setInitialSeekTime] = useState(null);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  const updateAppState = (state) => {
+    setAppState(state);
+    try {
+      localStorage.setItem("videosense_app_state", state);
+    } catch (e) {}
+  };
 
   // Ctrl+K key listener
   useEffect(() => {
@@ -46,22 +56,30 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const handleSelectVideo = (videoId) => {
+  const handleSelectVideo = (videoId, seekTime = null) => {
     setSelectedVideoId(videoId);
+    if (seekTime !== null && seekTime !== undefined) {
+      setInitialSeekTime(seekTime);
+    }
     setActiveTab("player");
   };
 
   // Pre-App Page switchers
   if (appState === "landing") {
-    return <LandingPage onGetStarted={() => setAppState("auth")} />;
+    return (
+      <LandingPage 
+        onGetStarted={() => updateAppState("auth")} 
+        onExplore={() => updateAppState("app")} 
+      />
+    );
   }
 
   if (appState === "auth") {
-    return <AuthPage onLoginSuccess={() => setAppState("onboarding")} />;
+    return <AuthPage onLoginSuccess={() => updateAppState("onboarding")} />;
   }
 
   if (appState === "onboarding") {
-    return <OnboardingFlow onOnboardingComplete={() => setAppState("app")} />;
+    return <OnboardingFlow onOnboardingComplete={() => updateAppState("app")} />;
   }
 
   return (
@@ -86,10 +104,12 @@ export default function App() {
             />
           )}
 
-          {activeTab === "upload" && <UploadPanel />}
+          {activeTab === "upload" && (
+            <UploadPanel onSelectVideo={handleSelectVideo} />
+          )}
 
           {activeTab === "library" && (
-            <VideoLibrary onSelectVideo={handleSelectVideo} />
+            <VideoLibrary onSelectVideo={handleSelectVideo} onNavigate={setActiveTab} />
           )}
 
           {/* Sync Video Player Workspace */}
@@ -108,19 +128,33 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1">
-                <VideoTimeline videoId={selectedVideoId} />
+                <VideoTimeline 
+                  videoId={selectedVideoId} 
+                  initialSeekTime={initialSeekTime} 
+                  onClearSeekTime={() => setInitialSeekTime(null)} 
+                />
               </div>
             </div>
           )}
 
-          {activeTab === "processing" && <AIProcessingConsole />}
+          {activeTab === "processing" && (
+            <AIProcessingConsole onSelectVideo={handleSelectVideo} onNavigate={setActiveTab} />
+          )}
 
-          {activeTab === "search" && <SemanticSearchConsole />}
+          {activeTab === "search" && (
+            <SemanticSearchConsole 
+              selectedVideoId={selectedVideoId}
+              onSelectVideo={handleSelectVideo} 
+              onNavigate={setActiveTab}
+            />
+          )}
 
           {activeTab === "chat" && (
-            <div className="max-w-3xl mx-auto">
-              <VideoChatPanel videoId={selectedVideoId || "mock-uuid-1"} />
-            </div>
+            <VideoChatPanel 
+              selectedVideoId={selectedVideoId} 
+              onSelectVideo={handleSelectVideo}
+              onNavigate={setActiveTab}
+            />
           )}
 
           {/* Product Discovery matching cards */}
@@ -165,7 +199,13 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === "analytics" && <AnalyticsDashboard />}
+          {activeTab === "analytics" && (
+            <AnalyticsDashboard 
+              selectedVideoId={selectedVideoId} 
+              onSelectVideo={handleSelectVideo} 
+              onNavigate={setActiveTab} 
+            />
+          )}
 
           {activeTab === "reports" && <ReportsManager />}
 

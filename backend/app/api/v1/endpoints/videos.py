@@ -15,8 +15,8 @@ from fastapi import (
 from app.core.container import Container
 from app.db.unit_of_work import UnitOfWork
 
-from app.models.analysis import Video, Job
-from app.models.processing_config import VideoProcessingConfig
+from sqlalchemy import func
+from app.models.analysis import Video, Job, Object, OCRResult, Transcript, Frame
 
 from app.utils.validators import VideoValidator
 from app.utils.hashing import calculate_sha256
@@ -167,13 +167,13 @@ def run_metadata_extraction_task(
 
                 "enable_scene_detection": True,
 
-                "frame_interval": 1,
+                "frame_interval": 1.0,
 
                 "whisper_model":
                     "whisper-tiny",
 
                 "yolo_model":
-                    "yolov8"
+                    "yolo11m.pt"
             }
 
 
@@ -413,6 +413,69 @@ async def upload_video(
 
     )
 
+
+
+# ============================================================
+# LIST VIDEOS
+# ============================================================
+
+@router.get(
+    "",
+    response_model=ResponseEnvelope[Any]
+)
+async def list_videos(request: Request):
+    request_id = getattr(request.state, "request_id", "N/A")
+    with UnitOfWork() as uow:
+        videos = uow.videos.list()
+        from datetime import datetime
+        videos.sort(key=lambda x: x.uploaded_at or datetime.min, reverse=True)
+
+        # Batch counts across videos to avoid N+1 queries
+        try:
+            obj_counts = dict(uow.session.query(Object.video_id, func.count(Object.id)).group_by(Object.video_id).all())
+        except Exception:
+            obj_counts = {}
+        try:
+            ocr_counts = dict(uow.session.query(OCRResult.video_id, func.count(OCRResult.id)).group_by(OCRResult.video_id).all())
+        except Exception:
+            ocr_counts = {}
+        try:
+            transcript_counts = dict(uow.session.query(Transcript.video_id, func.count(Transcript.id)).group_by(Transcript.video_id).all())
+        except Exception:
+            transcript_counts = {}
+        try:
+            frame_counts = dict(uow.session.query(Frame.video_id, func.count(Frame.id)).group_by(Frame.video_id).all())
+        except Exception:
+            frame_counts = {}
+
+        results = []
+        for v in videos:
+            status = v.job.status if v.job else "completed"
+            progress = v.job.progress if v.job else 100
+            results.append({
+                "id": v.id,
+                "filename": v.filename,
+                "title": v.filename,
+                "size_bytes": v.size_bytes,
+                "duration": v.duration,
+                "fps": v.fps,
+                "width": v.width,
+                "height": v.height,
+                "uploaded_at": v.uploaded_at.isoformat() if v.uploaded_at else None,
+                "status": status,
+                "progress": progress,
+                "total_objects": obj_counts.get(v.id, 0),
+                "total_ocr": ocr_counts.get(v.id, 0),
+                "total_transcripts": transcript_counts.get(v.id, 0),
+                "total_frames": frame_counts.get(v.id, 0),
+                "thumbnail_url": f"/api/v1/videos/{v.id}/thumbnail"
+            })
+    return ResponseEnvelope(
+        success=True,
+        message="Videos retrieved successfully.",
+        data=results,
+        request_id=request_id
+    )
 
 
 # ============================================================

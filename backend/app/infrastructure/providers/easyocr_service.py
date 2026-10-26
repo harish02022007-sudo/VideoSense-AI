@@ -52,8 +52,17 @@ class EasyOCRService(IOCRService):
 
         try:
             ocr_records = []
+            import cv2
+            total_frames = len(frame_paths)
             for i, fp in enumerate(frame_paths):
-                results = self.reader.readtext(fp)
+                img = cv2.imread(fp)
+                if img is None:
+                    logger.warn(f"OCR failed to load image: {fp}")
+                    continue
+                results = self.reader.readtext(img)
+                if (i + 1) % 10 == 0 or (i + 1) == total_frames:
+                    logger.info(f"EasyOCR scan progress: {i + 1}/{total_frames} frames processed ({(i + 1) / total_frames * 100:.1f}%)")
+                #print(results)
                 for bbox, text, conf in results:
                     # Bounding box is defined as list of four coordinates: [[x,y], [x,y], [x,y], [x,y]]
                     box_x_min = float(bbox[0][0])
@@ -74,5 +83,8 @@ class EasyOCRService(IOCRService):
                     })
             return Result.Success(ocr_records)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
+
             logger.error(f"EasyOCR execution exception: {str(e)}")
             return Result.Failure(f"EasyOCR text extraction exception: {str(e)}")

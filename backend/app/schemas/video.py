@@ -45,4 +45,4 @@ class VideoProcessingConfigDTO(BaseModel):
     enable_scene_detection: bool = True
     frame_rate: float = 1.0
     whisper_model: str = "tiny"
-    yolo_model: str = "yolo11n.pt"
+    yolo_model: str = "yolo11m.pt"

@@ -166,7 +166,7 @@ def test_complete_processing_flow():
                 "enable_scene_detection": True,
                 "frame_rate": 2.0,
                 "whisper_model": "tiny",
-                "yolo_model": "yolo11n.pt"
+                "yolo_model": "yolo11m.pt"
             }
             config_res = client.post(f"/api/v1/videos/{video_id}/configure", json=config_payload)
             assert config_res.status_code == 200

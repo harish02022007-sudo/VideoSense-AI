@@ -28,9 +28,15 @@ class LoggingSettings(BaseModel):
 
 
 class SecuritySettings(BaseModel):
-    max_upload_size_mb: int = 500
-    allowed_extensions: List[str] = ["mp4", "avi", "mov", "mkv"]
-    allowed_mime_types: List[str] = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/x-matroska"]
+    max_upload_size_mb: int = 1000
+    allowed_extensions: List[str] = [
+        "mp4", "avi", "mov", "mkv", "webm", "m4v", "flv", "wmv", "3gp", "ts", "mpg", "mpeg"
+    ]
+    allowed_mime_types: List[str] = [
+        "video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/msvideo",
+        "video/x-matroska", "video/webm", "video/x-m4v", "video/3gpp", "video/mpeg",
+        "video/ogg", "video/x-flv", "video/x-ms-wmv", "application/octet-stream"
+    ]
     enable_sha256_verification: bool = True
 
 
@@ -76,12 +82,11 @@ class AIModelMetadata(BaseModel):
 
 class AIProviderSettings(BaseModel):
     device: str = "cpu"
-    object_detection_provider: str = "yolov8"
+    object_detection_provider: str = "yolov11m"
     ocr_provider: str = "easyocr"
     speech_provider: str = "whisper"
     summary_provider: str = "mock"
     models: Dict[str, AIModelMetadata] = {
-        "yolov8": AIModelMetadata(name="YOLOv8 Nano", provider="ultralytics", version="8.3.0", supported_formats=["frames"]),
         "whisper": AIModelMetadata(name="Whisper Tiny", provider="faster-whisper", version="1.0.0", supported_formats=["audio"]),
         "easyocr": AIModelMetadata(name="EasyOCR English", provider="easyocr", version="1.7.2", supported_formats=["frames"])
     }
@@ -90,6 +95,12 @@ class AIProviderSettings(BaseModel):
 class StorageSettings(BaseModel):
     upload_dir: str = "./uploads"
     cache_dir: str = "./cache"
+
+
+class EmbeddingSettings(BaseModel):
+    storage_path: str = "storage/embeddings"
+    text_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    vision_model: str = "openai/clip-vit-base-patch32"
 
 
 class Settings(BaseSettings):
@@ -101,6 +112,7 @@ class Settings(BaseSettings):
     pipeline: PipelineSettings = PipelineSettings()
     providers: AIProviderSettings = AIProviderSettings()
     storage: StorageSettings = StorageSettings()
+    embeddings: EmbeddingSettings = EmbeddingSettings()
 
     class Config:
         env_prefix = "VIDEOSENSE_"

@@ -86,7 +86,7 @@ class CheckpointManager:
                 PipelineStage.SPEECH,
                 PipelineStage.OBJECT_DETECTION,
                 PipelineStage.FACE_DETECTION,
-                PipelineStage.EMBEDDING
+                PipelineStage.EMBEDDING_GENERATION
             ]
             
             try:

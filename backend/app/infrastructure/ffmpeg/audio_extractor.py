@@ -28,12 +28,27 @@ class FFmpegAudioExtractor(IAudioExtractor):
         ]
 
         logger.info(f"Extracting audio using FFmpeg command: {' '.join(cmd)}")
+    
         try:
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            return Result.Success(output_wav_path)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg audio extraction failed: {e.stderr or str(e)}")
-            return Result.Failure(f"FFmpeg audio extraction failed: {e.stderr or str(e)}")
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            if result.returncode == 0:
+                logger.info("Audio extracted successfully.")
+                return Result.Success(output_wav_path)
+
+            # Video has no audio stream
+            if "Output file does not contain any stream" in result.stderr:
+                logger.warning("No audio stream found. Skipping audio extraction.")
+                return Result.Success(None)
+
+            logger.error(f"FFmpeg audio extraction failed: {result.stderr}")
+            return Result.Failure(result.stderr)
+
         except Exception as e:
             logger.error(f"Exception during audio extraction: {str(e)}")
-            return Result.Failure(f"Exception during audio extraction: {str(e)}")
+            return Result.Failure(str(e))

@@ -67,6 +67,67 @@ async def retry_job(id: str, request: Request):
     )
 
 
+@router.get("", response_model=ResponseEnvelope[List[Dict[str, Any]]])
+async def list_jobs(request: Request, limit: int = 50):
+    """Lists recent pipeline jobs with video filenames and current status."""
+    request_id = getattr(request.state, "request_id", "N/A")
+    with UnitOfWork() as uow:
+        jobs = uow.jobs.list()
+        jobs.sort(key=lambda j: j.started_at or (j.video.uploaded_at if j.video else datetime.min) or datetime.min, reverse=True)
+        jobs = jobs[:limit]
+        
+        results = []
+        for j in jobs:
+            results.append({
+                "id": j.id,
+                "video_id": j.video_id,
+                "filename": j.video.filename if j.video else "Unknown",
+                "status": j.status,
+                "current_stage": j.current_stage or "queued",
+                "progress": j.progress or 0,
+                "started_at": j.started_at.isoformat() if j.started_at else None,
+                "completed_at": j.completed_at.isoformat() if j.completed_at else None,
+                "retry_count": j.retry_count,
+                "error_message": j.error_message,
+                "worker_id": j.worker_id
+            })
+            
+    return ResponseEnvelope(
+        success=True,
+        message="Jobs retrieved successfully.",
+        data=results,
+        request_id=request_id
+    )
+
+
+@router.get("/logs/recent", response_model=ResponseEnvelope[List[Dict[str, Any]]])
+async def get_recent_logs(request: Request, limit: int = 100):
+    """Retrieves recent logs across all pipeline jobs."""
+    request_id = getattr(request.state, "request_id", "N/A")
+    with UnitOfWork() as uow:
+        logs = uow.processing_logs.list()
+        logs.sort(key=lambda l: l.created_at or datetime.min, reverse=True)
+        logs = logs[:limit]
+        results = [
+            {
+                "id": l.id,
+                "job_id": l.job_id,
+                "video_id": l.video_id,
+                "stage": l.stage,
+                "level": l.level,
+                "message": l.message,
+                "created_at": l.created_at.isoformat() if l.created_at else None
+            }
+            for l in logs
+        ]
+    return ResponseEnvelope(
+        success=True,
+        message="Recent processing logs retrieved.",
+        data=results,
+        request_id=request_id
+    )
+
+
 @router.get("/{id}/logs", response_model=ResponseEnvelope[List[JobLogDTO]])
 async def get_job_logs(id: str, request: Request):
     """Retrieves all debug logging messages recorded by the job run."""

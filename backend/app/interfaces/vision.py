@@ -3,9 +3,9 @@ from typing import List, Any
 from app.types.results import Result
 
 class IObjectDetector(ABC):
-    """Abstract interface definition for YOLOv8/11 object classification domains."""
+    """Abstract interface definition for YOLO11 / Grounding DINO object classification domains."""
     @abstractmethod
-    def detect_objects(self, frame_paths: List[str]) -> Result[List[Any]]:
+    def detect_objects(self, frame_paths: List[str], caption: str = None, custom_only: bool = False) -> Result[List[Any]]:
         """Processes keyframes to locate, label, and return classification bounding boxes."""
         pass
 

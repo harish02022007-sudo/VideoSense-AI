@@ -19,6 +19,10 @@ from app.infrastructure.providers.yolo_detector import YoloObjectDetector
 from app.infrastructure.providers.easyocr_service import EasyOCRService
 from app.infrastructure.providers.whisper_service import WhisperSpeechRecognizer
 from app.infrastructure.ffmpeg.scene_detector import PySceneDetector
+from app.interfaces.embedding import IEmbeddingService
+from app.infrastructure.providers.embedding_service import EmbeddingService
+from app.interfaces.vector_storage import IVectorStorageService
+from app.infrastructure.storage.vector_storage import VectorStorageService
 
 class StubFaceDetector(IFaceDetector):
     def detect_faces(self, frame_paths: List[str]) -> Result[List[Any]]:
@@ -34,9 +38,13 @@ class Container:
     _preview_generator: IPreviewGenerator = FFmpegPreviewGenerator()
     _ocr_service: IOCRService = EasyOCRService()
     _speech_service: ISpeechRecognizer = WhisperSpeechRecognizer()
-    _vision_service: IObjectDetector = YoloObjectDetector()
+    _yolo_service: IObjectDetector = YoloObjectDetector()
+    _vision_service: IObjectDetector = _yolo_service
+    _open_world_vision_service: IObjectDetector = _yolo_service
     _face_detector: IFaceDetector = StubFaceDetector()
     _scene_detector: ISceneDetector = PySceneDetector()
+    _embedding_service: IEmbeddingService = EmbeddingService()
+    _vector_storage: IVectorStorageService = VectorStorageService()
 
     @classmethod
     def get_storage_manager(cls) -> IStorageManager:
@@ -71,6 +79,10 @@ class Container:
         return cls._vision_service
 
     @classmethod
+    def get_open_world_vision_service(cls) -> IObjectDetector:
+        return cls._open_world_vision_service
+
+    @classmethod
     def get_face_detector(cls) -> IFaceDetector:
         return cls._face_detector
 
@@ -85,3 +97,18 @@ class Container:
     @classmethod
     def get_error_handler(cls) -> type[PipelineErrorHandler]:
         return PipelineErrorHandler
+
+    @classmethod
+    def get_embedding_service(cls) -> IEmbeddingService:
+        return cls._embedding_service
+
+    @classmethod
+    def get_vector_storage(cls) -> IVectorStorageService:
+        return cls._vector_storage
+
+    @classmethod
+    def get_search_service(cls) -> Any:
+        from app.services.search_service import SearchService
+        if not hasattr(cls, "_search_service_instance"):
+            cls._search_service_instance = SearchService()
+        return cls._search_service_instance

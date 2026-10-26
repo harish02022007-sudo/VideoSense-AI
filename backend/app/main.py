@@ -52,6 +52,18 @@ app.add_exception_handler(Exception, global_exception_handler)
 # Mount API version 1 Router
 app.include_router(api_router, prefix="/api/v1")
 
+# Mount static uploads directory for video streaming, previews, and thumbnails
+import os
+from fastapi.staticfiles import StaticFiles
+uploads_path = os.path.abspath(settings.storage.upload_dir)
+os.makedirs(uploads_path, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
+
+# Mount Sample_Videos directory for sample selection
+sample_videos_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "Sample_Videos"))
+if os.path.exists(sample_videos_path):
+    app.mount("/sample_videos", StaticFiles(directory=sample_videos_path), name="sample_videos")
+
 @app.get("/")
 def read_root():
     return {

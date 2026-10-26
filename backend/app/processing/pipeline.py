@@ -18,6 +18,7 @@ from app.core.logging import get_logger
 from app.models.analysis import Video, Job, Frame, OCRResult, Transcript, Scene, Object, Audio, FaceDetection
 from app.models.pipeline import PipelineExecution
 from app.models.embedding import VideoEmbedding
+from app.workers.embedding_worker import EmbeddingWorker
 
 logger = get_logger("app.processing.pipeline")
 
@@ -148,7 +149,7 @@ class PipelineService:
         if not frame_res.success:
             PipelineErrorHandler.handle_stage_failure(context, stage, 2, "FRAME_EXTRACTION_FAILED", frame_res.error, elapsed)
             return
-
+  
         frame_paths = frame_res.value
         # Register Frame rows in database
         with UnitOfWork() as uow:
@@ -192,22 +193,38 @@ class PipelineService:
         audio_res = audio_extractor.extract_audio(video_path, audio_wav)
         elapsed = int((time.time() - start_time) * 1000)
 
+        # Skip audio processing if the video has no audio stream
         if not audio_res.success:
-            PipelineErrorHandler.handle_stage_failure(context, stage, 3, "AUDIO_EXTRACTION_FAILED", audio_res.error, elapsed)
-            return
+            if "no audio stream" in audio_res.error.lower():
+                logger.warning(f"Video {video_id} has no audio stream. Skipping audio stage.")
+                audio_wav = None
+            else:
+                PipelineErrorHandler.handle_stage_failure(
+                    context,
+                    stage,
+                    3,
+                    "AUDIO_EXTRACTION_FAILED",
+                    audio_res.error,
+                    elapsed
+                )
+                return
 
         # Register Audio row in database
-        with UnitOfWork() as uow:
-            audio_entity = Audio(
-                id=str(uuid.uuid4()),
-                video_id=video_id,
-                filepath=audio_wav,
+        if audio_wav is not None:
+            with UnitOfWork() as uow:
+                audio_entity = Audio(
+                    id=str(uuid.uuid4()),
+                    video_id=video_id,
+                    filepath=audio_wav,
                 sample_rate=16000,
                 channels=1
             )
             uow.audio.add(audio_entity)
             context.add_artifact("audio", audio_wav)
             uow.commit()
+
+        else:
+            logger.info(f"No audio file generated for video {video_id}. Skipping audio database entry.")
 
         CheckpointManager.save_checkpoint(
             context, stage, 3, "SUCCESS", 25, 40, elapsed, metadata={"audio_path": audio_wav}
@@ -317,39 +334,60 @@ class PipelineService:
         ProgressTracker.update_stage_progress(context, stage, 6)
         start_time = time.time()
 
-        speech_service = Container.get_speech_service()
-        speech_res = speech_service.transcribe(audio_wav)
-        elapsed = int((time.time() - start_time) * 1000)
+        # Skip speech recognition if there is no audio
+        if not os.path.exists(audio_wav):
+            logger.warning(f"Skipping speech recognition for video {video_id} because no audio stream exists.")
+            speech_list = []
+            elapsed = int((time.time() - start_time) * 1000)
+        else:
+            speech_service = Container.get_speech_service()
+            speech_res = speech_service.transcribe(audio_wav)
+            elapsed = int((time.time() - start_time) * 1000)
 
-        if not speech_res.success:
-            PipelineErrorHandler.handle_stage_failure(context, stage, 6, "SPEECH_FAILED", speech_res.error, elapsed)
-            return
-
-        speech_list = speech_res.value
-        with UnitOfWork() as uow:
-            for seg in speech_list:
-                transcript_entity = Transcript(
-                    id=str(uuid.uuid4()),
-                    video_id=video_id,
-                    text=seg["text"],
-                    confidence=seg["confidence"],
-                    start_time_ms=seg["start_time_ms"],
-                    end_time_ms=seg["end_time_ms"],
-                    speaker_label=seg.get("speaker_label"),
-                    language=seg.get("language")
+            if not speech_res.success:
+                PipelineErrorHandler.handle_stage_failure(
+                    context,
+                    stage,
+                    6,
+                    "SPEECH_FAILED",
+                    speech_res.error,
+                    elapsed
                 )
-                uow.transcripts.add(transcript_entity)
-            uow.commit()
+                return
+
+            speech_list = speech_res.value
+            with UnitOfWork() as uow:
+                for seg in speech_list:
+                    transcript_entity = Transcript(
+                        id=str(uuid.uuid4()),
+                        video_id=video_id,
+                        text=seg["text"],
+                        confidence=seg["confidence"],
+                        start_time_ms=seg["start_time_ms"],
+                        end_time_ms=seg["end_time_ms"],
+                        speaker_label=seg.get("speaker_label"),
+                        language=seg.get("language")
+                    )
+                    uow.transcripts.add(transcript_entity)
+                uow.commit()
 
         CheckpointManager.save_checkpoint(
-            context, stage, 6, "SUCCESS", 70, 82, elapsed, metadata={"transcripts_count": len(speech_list)}
+            context, stage, 6, "SUCCESS", 70, 82, elapsed, 
+            metadata={"transcripts_count": len(speech_list)}
         )
 
-        cls.create_processing_log(
-            video_id,
-            job_id,
-            "speech_completed"
-        )
+        if not os.path.exists(audio_wav):
+            cls.create_processing_log(
+                video_id,
+                job_id,
+                "speech_skipped"
+            )
+        else:
+            cls.create_processing_log(
+                video_id,
+                job_id,
+                "speech_completed"
+            )
 
         # -------------------------------------------------------------
         # STAGE 7: OBJECT DETECTION (YOLOv11 tracking)
@@ -359,7 +397,41 @@ class PipelineService:
         start_time = time.time()
 
         vision_service = Container.get_vision_service()
-        vision_res = vision_service.detect_objects(frame_paths)
+
+        # Dynamically extract contextual domain keywords from video title, transcripts, and OCR
+        video_caption = None
+        try:
+            with UnitOfWork() as uow:
+                v_ent = uow.videos.get(video_id)
+                transcripts = uow.transcripts.get_by_video_id(video_id)
+                ocr_results = uow.ocr_results.get_by_video_id(video_id)
+
+                context_text = ""
+                if v_ent and v_ent.filename:
+                    context_text += " " + v_ent.filename
+                if transcripts:
+                    context_text += " " + " ".join([t.text for t in transcripts[:10]])
+                if ocr_results:
+                    context_text += " " + " ".join([o.text for o in ocr_results[:10]])
+
+                import re
+                clean = re.sub(r'\.(mp4|avi|mov|mkv|webm)$', '', context_text, flags=re.IGNORECASE)
+                clean = re.sub(r'#\w+', ' ', clean)
+                clean = re.sub(r'[^\w\s]', ' ', clean)
+                stop_words = {
+                    'video', 'whatsapp', 'at', 'pm', 'am', 'test', 'sample', 'the', 'a', 'an', 'and', 'or', 'in', 'on', 'of',
+                    'for', 'to', 'with', 'vs', 'by', 'from', 'shorts', 'short', 'reels', 'tik', 'tok', 'mini', 'world',
+                    'is', 'are', 'was', 'were', 'it', 'this', 'that', 'they', 'we', 'you', 'i', 'he', 'she', 'not', 'so'
+                }
+                kws = [w.lower().strip() for w in clean.split() if len(w.strip()) >= 3 and w.lower().strip() not in stop_words and w.isalpha()]
+                if kws:
+                    unique_kws = list(dict.fromkeys(kws))[:12]
+                    video_caption = " . ".join(unique_kws)
+                    logger.info(f"Generated adaptive vision prompt for {video_id}: {video_caption}")
+        except Exception as cap_err:
+            logger.warn(f"Failed to extract contextual keywords from video {video_id}: {cap_err}")
+
+        vision_res = vision_service.detect_objects(frame_paths, caption=video_caption)
         elapsed = int((time.time() - start_time) * 1000)
 
         if not vision_res.success:
@@ -452,29 +524,13 @@ class PipelineService:
         )
 
         # -------------------------------------------------------------
-        # STAGE 9: FACE DETECTION & EMBEDDING PLACEHOLDERS
-        # -------------------------------------------------------------
-        # Add basic placeholder entries for vectors & face bounding box architecture readiness
-        with UnitOfWork() as uow:
-            mock_emb = VideoEmbedding(
-                id=str(uuid.uuid4()),
-                video_id=video_id,
-                embedding_type="VIDEO",
-                vector_reference=f"/uploads/{video_id}/analysis/video_emb.bin",
-                model_name="clip-ViT-B-32",
-                dimension=512
-            )
-            uow.video_embeddings.add(mock_emb)
-            uow.commit()
-
-        # -------------------------------------------------------------
-        # STAGE 10: COMPLETED
+        # STAGE 9: PIPELINE COMPLETED & ASYNC EMBEDDING TRIGGERS
         # -------------------------------------------------------------
         stage = PipelineStage.COMPLETED
-        ProgressTracker.update_stage_progress(context, stage, 10, elapsed)
+        ProgressTracker.update_stage_progress(context, stage, 9, elapsed)
 
         logger.info(
-            f"Pipeline completed successfully for job {job_id}"
+            f"Main pipeline completed successfully for job {job_id}. Dispatching asynchronous embedding generation worker."
         )
 
         cls.create_processing_log(
@@ -483,9 +539,12 @@ class PipelineService:
             "pipeline_completed"
         )
 
+        # Set job stage status to queued for embedding, then dispatch background task
         with UnitOfWork() as uow:
             job = uow.jobs.get(job_id)
             if job:
-                job.status = "completed"
-                job.completed_at = datetime.utcnow()
+                job.current_stage = "embedding_generation"
+                job.status = "embedding_pending"
             uow.commit()
+
+        EmbeddingWorker.start_embedding_task(video_id, job_id, correlation_id)

@@ -1,4 +1,5 @@
 import os
+import mimetypes
 from app.core.config import settings
 from app.types.results import Result
 
@@ -13,15 +14,30 @@ class VideoValidator:
                 f"File size exceeds maximum upload limit of {settings.security.max_upload_size_mb}MB."
             )
 
+        if size_bytes <= 0:
+            return Result.Failure("Uploaded file is empty (0 bytes).")
+
         # Validate file extension
-        ext = os.path.splitext(filename)[1].replace(".", "").lower()
-        if ext not in settings.security.allowed_extensions:
+        ext = os.path.splitext(filename or "")[1].replace(".", "").lower()
+        if not ext or ext not in settings.security.allowed_extensions:
             return Result.Failure(
-                f"Unsupported file extension '.{ext}'. Supported: {', '.join(settings.security.allowed_extensions)}"
+                f"Unsupported file extension '.{ext}'. Supported video formats: {', '.join(settings.security.allowed_extensions)}"
             )
 
-        # Validate MIME type
-        if content_type not in settings.security.allowed_mime_types:
+        # Validate MIME type (resilient against browser/OS header variations)
+        norm_mime = (content_type or "").lower().strip()
+        guessed_type, _ = mimetypes.guess_type(filename or "")
+        guessed_type = (guessed_type or "").lower()
+
+        is_valid_mime = (
+            norm_mime.startswith("video/") or
+            guessed_type.startswith("video/") or
+            norm_mime in settings.security.allowed_mime_types or
+            guessed_type in settings.security.allowed_mime_types or
+            (norm_mime in ["application/octet-stream", "binary/octet-stream", ""] and ext in settings.security.allowed_extensions)
+        )
+
+        if not is_valid_mime:
             return Result.Failure(
                 f"Invalid file MIME type '{content_type}'. Expected video content."
             )

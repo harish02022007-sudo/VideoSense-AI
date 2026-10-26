@@ -142,3 +142,19 @@ frontend_temp/
 ############################
 *_log.txt
 install_log.txt
+
+############################
+# Local Media, Scratch & Temp
+############################
+GroundingDINO/
+Sample_Videos/
+scratch/
+frontend/.vite_cache/
+backend/storage/
+storage/
+backend/runs/
+*.mp4
+*.part
+summary.zip
+.git_test/
+.git_backup/

@@ -42,6 +42,18 @@ class IVideoEmbeddingRepository(IRepository[Any], ABC):
     def get_by_video_id(self, video_id: str) -> List[Any]:
         pass
 
+    @abstractmethod
+    def create_embedding(self, entity: Any) -> Any:
+        pass
+
+    @abstractmethod
+    def get_by_video_and_type(self, video_id: str, embedding_type: str) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    def delete_by_video_id(self, video_id: str) -> bool:
+        pass
+
 class IModelRegistryRepository(IRepository[Any], ABC):
     @abstractmethod
     def get_by_name(self, model_name: str) -> Optional[Any]:

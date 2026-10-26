@@ -22,7 +22,7 @@ function CountUp({ end, suffix = "", duration = 2000 }) {
   return <span className="text-glow-cyan">{count.toLocaleString()}{suffix}</span>;
 }
 
-export default function LandingPage({ onGetStarted }) {
+export default function LandingPage({ onGetStarted, onExplore }) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   // Parallax tracker
@@ -128,10 +128,10 @@ export default function LandingPage({ onGetStarted }) {
             Start For Free <ArrowRight className="w-5 h-5 animate-pulse" />
           </button>
           <button 
-            onClick={() => alert("Redirecting to documentation...")} 
+            onClick={onExplore || onGetStarted} 
             className="btn-glass px-8 py-3.5 text-base hover:bg-white/10 transition-all duration-300"
           >
-            Read AI Research Paper
+            Launch Command Center
           </button>
         </motion.div>
 

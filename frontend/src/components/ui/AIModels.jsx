@@ -1,13 +1,15 @@
 import React from "react";
-import { Cpu, ShieldCheck, Zap, HardDrive, LineChart } from "lucide-react";
+import { Cpu, ShieldCheck, Zap, HardDrive, Sparkles, Database } from "lucide-react";
 
 export default function AIModels() {
   const models = [
-    { name: "YOLOv11 Nano", type: "Object Tracking", status: "Loaded", memory: "120 MB", latency: "14 ms", device: "CPU", version: "v11.0.4" },
-    { name: "Whisper Base", type: "Speech-to-Text", status: "Idle", memory: "480 MB", latency: "120 ms", device: "CPU", version: "v2.1.0" },
-    { name: "PaddleOCR", type: "Screen Text OCR", status: "Loaded", memory: "95 MB", latency: "8 ms", device: "CPU", version: "v4.0.2" },
-    { name: "CLIP ViT-B/32", type: "Multimodal Embeddings", status: "Loaded", memory: "350 MB", latency: "32 ms", device: "CPU", version: "v1.2" },
-    { name: "Qwen 2.5 3B Instruct", type: "Reasoning LLM", status: "Loaded", memory: "1.8 GB", latency: "45 ms", device: "CPU", version: "v2.5.3" }
+    { name: "YOLOv8 Nano", type: "Visual Object Tracking", status: "Active", memory: "12 MB", latency: "18 ms", device: "CPU", version: "v8.2.0" },
+    { name: "Faster-Whisper", type: "Speech Transcription", status: "Active", memory: "140 MB", latency: "85 ms", device: "CPU / CTranslate2", version: "v1.0.3" },
+    { name: "EasyOCR", type: "Multilingual OCR Detection", status: "Active", memory: "85 MB", latency: "40 ms", device: "PyTorch CPU", version: "v1.7.1" },
+    { name: "PySceneDetect", type: "Content Boundary Detection", status: "Active", memory: "25 MB", latency: "12 ms", device: "OpenCV Engine", version: "v0.6.4" },
+    { name: "CLIP ViT-B/32", type: "Vision Vector Embeddings", status: "Active", memory: "350 MB", latency: "35 ms", device: "Sentence-Transformers", version: "v2.2.2" },
+    { name: "all-MiniLM-L6-v2", type: "Text & Audio Embeddings", status: "Active", memory: "90 MB", latency: "10 ms", device: "Sentence-Transformers", version: "v2.2.2" },
+    { name: "FAISS Vector Index", type: "Dense Cosine/L2 Storage", status: "Active", memory: "15 MB", latency: "0.8 ms", device: "Flat L2 / IP", version: "v1.7.4" }
   ];
 
   return (
@@ -17,7 +19,7 @@ export default function AIModels() {
           Neural Model Registry
         </h2>
         <p className="text-gray-400 mt-2 text-sm">
-          Active deep learning weights running in the local VideoSense AI environment.
+          Active deep learning weights and vector storage engines running in the VideoSense AI backend.
         </p>
       </div>
 

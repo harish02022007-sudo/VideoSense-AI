@@ -94,3 +94,8 @@ To run using production configurations (PostgreSQL database service):
 ```bash
 docker compose -f docker/docker-compose.prod.yml up --build
 ```
+
+
+<!-- to start
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --reload --port 8000 -->

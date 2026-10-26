@@ -1,0 +1,10 @@
+cd backend
+..\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --reload --port 8000
+
+
+tinny - fde6ff15-1a81-4edc-a498-0860393302f7
+
+b9a53f98-a56b-438d-aed3-bee5831452f7
+
+Nature - d4d23ecb-78a2-4c96-9a9e-f19476f6bdf5

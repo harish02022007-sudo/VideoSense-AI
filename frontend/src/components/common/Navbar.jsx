@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Play, Activity, Bell, Cpu, LayoutGrid, ChevronDown, Clock, Search, ShieldCheck } from "lucide-react";
-import axios from "axios";
+import api from "../../services/api";
 
 export default function Navbar() {
   const [health, setHealth] = useState(null);
@@ -23,10 +23,10 @@ export default function Navbar() {
     const checkDiagnostics = async () => {
       try {
         const start = performance.now();
-        const res = await axios.get("http://localhost:8000/api/v1/health");
+        const data = await api.getHealth();
         const end = performance.now();
         setLatency(Math.round(end - start));
-        setHealth(res.data);
+        setHealth(data);
       } catch (err) {
         setHealth({ status: "offline", system: { cpu_usage_percent: 0, memory_usage_percent: 0 } });
         setLatency(0);
