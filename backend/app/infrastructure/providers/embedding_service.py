@@ -178,3 +178,16 @@ class EmbeddingService(IEmbeddingService):
             return 384
         else:
             return 384
+
+    def unload(self) -> None:
+        """Unloads models and reclaims memory."""
+        self._text_model = None
+        self._vision_model = None
+        import gc
+        gc.collect()
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)
+        except Exception:
+            pass

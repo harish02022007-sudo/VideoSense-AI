@@ -104,10 +104,16 @@ class EmbeddingWorker:
             # --- B. FRAME EMBEDDING ---
             # Sort frames by frame_number to ensure consistency
             sorted_frames = sorted(db_frames, key=lambda f: f.frame_number)
+            if len(sorted_frames) > 12:
+                step = max(1, len(sorted_frames) // 10)
+                target_frames = [sorted_frames[i] for i in range(0, len(sorted_frames), step)][:12]
+            else:
+                target_frames = sorted_frames
+
             frame_embeddings = []
             frame_meta = []
             
-            for idx, frame in enumerate(sorted_frames):
+            for idx, frame in enumerate(target_frames):
                 emb = embedding_service.generate_frame_embedding(frame.filepath)
                 frame_embeddings.append(emb)
                 frame_meta.append({
@@ -286,3 +292,19 @@ class EmbeddingWorker:
                 )
                 uow.processing_logs.add(log)
                 uow.commit()
+
+        finally:
+            try:
+                emb_svc = Container.get_embedding_service()
+                if hasattr(emb_svc, "unload"):
+                    emb_svc.unload()
+            except Exception:
+                pass
+            import gc
+            gc.collect()
+            try:
+                import ctypes
+                libc = ctypes.CDLL("libc.so.6")
+                libc.malloc_trim(0)
+            except Exception:
+                pass

@@ -48,6 +48,8 @@ services:
         value: "1"
       - key: PYTHONMALLOC
         value: "malloc"
+      - key: LOW_MEMORY_MODE
+        value: "true"
 
   # ---------------------------------------------------------------------------
   # 2. React Vite Frontend Static Site (Global CDN - no region)

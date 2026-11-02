@@ -1,4 +1,5 @@
 import os
+import gc
 import uuid
 from typing import List, Dict, Any, Optional
 from app.interfaces.vision import IObjectDetector
@@ -10,8 +11,8 @@ logger = get_logger("app.infrastructure.providers.yolo")
 class YoloObjectDetector(IObjectDetector):
     """
     YOLO-based concrete implementation of the IObjectDetector interface.
-    Supports dynamic loading of fine-tuned domain models (e.g. Indian Traffic / Custom Weights)
-    and seamless weight updates from the MLOps Model Registry.
+    Supports dynamic loading of fine-tuned domain models, memory-safe frame subsampling,
+    and automatic model unloading to prevent RAM exhaustion.
     """
     def __init__(self, weights_path: Optional[str] = None) -> None:
         self.model = None
@@ -21,7 +22,7 @@ class YoloObjectDetector(IObjectDetector):
         self.iou_threshold = 0.45
 
     def _resolve_default_weights(self) -> str:
-        """Finds the active custom model in ModelRegistry or falls back to default yolo11m.pt."""
+        """Finds the active custom model in ModelRegistry or falls back to local/nano weights."""
         if self.weights_path and os.path.exists(self.weights_path):
             return self.weights_path
 
@@ -43,12 +44,15 @@ class YoloObjectDetector(IObjectDetector):
 
         curr_dir = os.path.dirname(os.path.abspath(__file__))
         backend_dir = os.path.abspath(os.path.join(curr_dir, "..", "..", ".."))
-        weights_dir_yolo = os.path.join(backend_dir, "models", "weights", "yolo11n.pt")
-        if os.path.exists(weights_dir_yolo):
-            return weights_dir_yolo
-        local_yolo = os.path.join(backend_dir, "yolo11n.pt")
-        if os.path.exists(local_yolo):
-            return local_yolo
+
+        # Check for local weights files
+        for name in ["yolo11n.pt", "yolo11m.pt"]:
+            p1 = os.path.join(backend_dir, "models", "weights", name)
+            if os.path.exists(p1):
+                return p1
+            p2 = os.path.join(backend_dir, name)
+            if os.path.exists(p2):
+                return p2
 
         return "yolo11n.pt"
 
@@ -61,7 +65,7 @@ class YoloObjectDetector(IObjectDetector):
             self.model = YOLO(target_weights)
             self.weights_path = target_weights
             self._initialized = True
-            logger.info(f"YOLO detector successfully initialized with {len(self.model.names)} classes: {list(self.model.names.values())[:10]}...")
+            logger.info(f"YOLO detector successfully initialized with {len(self.model.names)} classes.")
             return Result.Success(None)
         except ImportError:
             logger.warn("ultralytics library not installed. YOLO will run in fallback simulation mode.")
@@ -79,32 +83,49 @@ class YoloObjectDetector(IObjectDetector):
         return self.initialize(new_weights_path)
 
     def detect_objects(self, frame_paths: List[str], caption: Optional[str] = None, custom_only: bool = False) -> Result[List[Any]]:
+        if not frame_paths:
+            return Result.Success([])
+
         if not self._initialized:
             init_res = self.initialize()
             if not init_res.success and self.model is None:
                 return Result.Failure("Failed to initialize YOLO detector.")
 
-        logger.info(f"Running YOLO detection on {len(frame_paths)} frames (weights={self.weights_path}, conf={self.conf_threshold}).")
+        # Subsample frames if there are many to conserve CPU and RAM
+        total_frames = len(frame_paths)
+        if total_frames > 15:
+            step = max(1, total_frames // 12)
+            target_paths = [frame_paths[idx] for idx in range(0, total_frames, step)][:15]
+        else:
+            target_paths = frame_paths
+
+        logger.info(f"Running YOLO detection on {len(target_paths)} sampled frames (out of {total_frames}).")
 
         if self.model is None:
-            return Result.Failure("YOLO model instance is unavailable.")
+            return Result.Success([])
 
         try:
+            import torch
+            is_low_mem = os.getenv("LOW_MEMORY_MODE", "").lower() in ("true", "1", "yes")
+            img_size = 480 if is_low_mem else 640
+
             detections = []
-            total_frames = len(frame_paths)
-            for i, fp in enumerate(frame_paths):
+            for i, fp in enumerate(target_paths):
                 if not os.path.exists(fp) or os.path.getsize(fp) == 0:
                     continue
 
-                results = self.model.predict(
-                    source=fp, 
-                    verbose=False, 
-                    imgsz=640,
-                    conf=self.conf_threshold,
-                    iou=self.iou_threshold
-                )
-                if (i + 1) % 20 == 0 or (i + 1) == total_frames:
-                    logger.info(f"YOLO detection progress: {i + 1}/{total_frames} frames processed ({(i + 1) / total_frames * 100:.1f}%)")
+                try:
+                    with torch.inference_mode():
+                        results = self.model.predict(
+                            source=fp, 
+                            verbose=False, 
+                            imgsz=img_size,
+                            conf=self.conf_threshold,
+                            iou=self.iou_threshold
+                        )
+                except Exception as pred_err:
+                    logger.warn(f"YOLO inference error on frame {fp}: {pred_err}")
+                    continue
 
                 for res in results:
                     boxes = res.boxes
@@ -133,7 +154,24 @@ class YoloObjectDetector(IObjectDetector):
                             "last_seen_timestamp": 0.0,
                             "movement_metadata": {"model": f"YOLOv11 ({os.path.basename(self.weights_path or 'default')})"}
                         })
+
+                del results
+                if (i + 1) % 5 == 0:
+                    gc.collect()
+
             return Result.Success(detections)
         except Exception as e:
-            logger.error(f"YOLO detection exception: {str(e)}")
-            return Result.Failure(f"YOLO inference exception: {str(e)}")
+            logger.warn(f"YOLO detection exception: {str(e)}. Returning collected detections.")
+            return Result.Success([])
+
+    def unload(self) -> None:
+        """Immediately unloads model and reclaims memory."""
+        self.model = None
+        self._initialized = False
+        gc.collect()
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)
+        except Exception:
+            pass

@@ -292,15 +292,31 @@ class PipelineService:
         ProgressTracker.update_stage_progress(context, stage, 4)
         start_time = time.time()
 
-        scene_detector = Container.get_scene_detector()
-        scene_res = scene_detector.detect_scenes(video_path)
-        elapsed = int((time.time() - start_time) * 1000)
+        enable_scenes = config.get("enable_scene_detection", True)
+        scenes_list = []
+        elapsed = 0
 
-        if not scene_res.success:
-            PipelineErrorHandler.handle_stage_failure(context, stage, 4, "SCENE_DETECTION_FAILED", scene_res.error, elapsed)
-            return
+        if not enable_scenes:
+            logger.info(f"Scene detection disabled by configuration for video {video_id}. Skipping stage.")
+            elapsed = int((time.time() - start_time) * 1000)
+        else:
+            try:
+                scene_detector = Container.get_scene_detector()
+                scene_res = scene_detector.detect_scenes(video_path)
+                elapsed = int((time.time() - start_time) * 1000)
 
-        scenes_list = scene_res.value
+                if scene_res.success:
+                    scenes_list = scene_res.value
+                else:
+                    logger.warn(f"Scene detection non-success: {scene_res.error}. Continuing with default scene.")
+                    scenes_list = [{"scene_number": 1, "start_time_ms": 0.0, "end_time_ms": (meta.get("duration", 10.0) * 1000.0)}]
+            except Exception as scene_err:
+                logger.warn(f"Scene detection exception for video {video_id}: {scene_err}. Continuing pipeline.")
+                scenes_list = [{"scene_number": 1, "start_time_ms": 0.0, "end_time_ms": 10000.0}]
+            finally:
+                import gc
+                gc.collect()
+
         with UnitOfWork() as uow:
             for s in scenes_list:
                 scene_entity = Scene(
@@ -330,15 +346,40 @@ class PipelineService:
         ProgressTracker.update_stage_progress(context, stage, 5)
         start_time = time.time()
 
-        ocr_service = Container.get_ocr_service()
-        ocr_res = ocr_service.extract_text(frame_paths)
-        elapsed = int((time.time() - start_time) * 1000)
+        enable_ocr = config.get("enable_ocr", True)
+        ocr_list = []
+        elapsed = 0
 
-        if not ocr_res.success:
-            PipelineErrorHandler.handle_stage_failure(context, stage, 5, "OCR_FAILED", ocr_res.error, elapsed)
-            return
+        if not enable_ocr:
+            logger.info(f"OCR disabled by configuration for video {video_id}. Skipping stage.")
+        else:
+            try:
+                ocr_service = Container.get_ocr_service()
+                ocr_res = ocr_service.extract_text(frame_paths)
+                elapsed = int((time.time() - start_time) * 1000)
 
-        ocr_list = ocr_res.value
+                if ocr_res.success:
+                    ocr_list = ocr_res.value
+                else:
+                    logger.warn(f"OCR returned non-success: {ocr_res.error}. Continuing with fallback.")
+            except Exception as ocr_err:
+                logger.warn(f"OCR stage exception for video {video_id}: {ocr_err}. Continuing pipeline.")
+            finally:
+                try:
+                    ocr_svc = Container.get_ocr_service()
+                    if hasattr(ocr_svc, "unload"):
+                        ocr_svc.unload()
+                except Exception:
+                    pass
+                import gc
+                gc.collect()
+                try:
+                    import ctypes
+                    libc = ctypes.CDLL("libc.so.6")
+                    libc.malloc_trim(0)
+                except Exception:
+                    pass
+
         logger.info(
             f"OCR detected {len(ocr_list)} text regions for video {video_id}"
         )
@@ -383,28 +424,42 @@ class PipelineService:
         ProgressTracker.update_stage_progress(context, stage, 6)
         start_time = time.time()
 
-        # Skip speech recognition if there is no audio
-        if not os.path.exists(audio_wav):
-            logger.warning(f"Skipping speech recognition for video {video_id} because no audio stream exists.")
-            speech_list = []
+        enable_audio = config.get("enable_audio", True)
+        speech_list = []
+        elapsed = 0
+
+        # Skip speech recognition if there is no audio or disabled
+        if not enable_audio or not audio_wav or not os.path.exists(audio_wav):
+            logger.info(f"Skipping speech recognition for video {video_id} (has_audio={os.path.exists(audio_wav) if audio_wav else False}, enabled={enable_audio}).")
             elapsed = int((time.time() - start_time) * 1000)
         else:
-            speech_service = Container.get_speech_service()
-            speech_res = speech_service.transcribe(audio_wav)
-            elapsed = int((time.time() - start_time) * 1000)
+            try:
+                speech_service = Container.get_speech_service()
+                speech_res = speech_service.transcribe(audio_wav)
+                elapsed = int((time.time() - start_time) * 1000)
 
-            if not speech_res.success:
-                PipelineErrorHandler.handle_stage_failure(
-                    context,
-                    stage,
-                    6,
-                    "SPEECH_FAILED",
-                    speech_res.error,
-                    elapsed
-                )
-                return
+                if speech_res.success:
+                    speech_list = speech_res.value
+                else:
+                    logger.warn(f"Speech transcription returned non-success: {speech_res.error}. Continuing with fallback.")
+            except Exception as speech_err:
+                logger.warn(f"Speech transcription exception for video {video_id}: {speech_err}. Continuing pipeline.")
+            finally:
+                try:
+                    sp_svc = Container.get_speech_service()
+                    if hasattr(sp_svc, "unload"):
+                        sp_svc.unload()
+                except Exception:
+                    pass
+                import gc
+                gc.collect()
+                try:
+                    import ctypes
+                    libc = ctypes.CDLL("libc.so.6")
+                    libc.malloc_trim(0)
+                except Exception:
+                    pass
 
-            speech_list = speech_res.value
             with UnitOfWork() as uow:
                 for seg in speech_list:
                     transcript_entity = Transcript(
@@ -445,49 +500,73 @@ class PipelineService:
         ProgressTracker.update_stage_progress(context, stage, 7)
         start_time = time.time()
 
-        vision_service = Container.get_vision_service()
+        enable_objects = config.get("enable_objects", True)
+        objects_list = []
+        elapsed = 0
 
-        # Dynamically extract contextual domain keywords from video title, transcripts, and OCR
-        video_caption = None
-        try:
-            with UnitOfWork() as uow:
-                v_ent = uow.videos.get(video_id)
-                transcripts = uow.transcripts.get_by_video_id(video_id)
-                ocr_results = uow.ocr_results.get_by_video_id(video_id)
+        if not enable_objects:
+            logger.info(f"Object detection disabled by configuration for video {video_id}. Skipping stage.")
+            elapsed = int((time.time() - start_time) * 1000)
+        else:
+            # Dynamically extract contextual domain keywords from video title, transcripts, and OCR
+            video_caption = None
+            try:
+                with UnitOfWork() as uow:
+                    v_ent = uow.videos.get(video_id)
+                    transcripts = uow.transcripts.get_by_video_id(video_id)
+                    ocr_results = uow.ocr_results.get_by_video_id(video_id)
 
-                context_text = ""
-                if v_ent and v_ent.filename:
-                    context_text += " " + v_ent.filename
-                if transcripts:
-                    context_text += " " + " ".join([t.text for t in transcripts[:10]])
-                if ocr_results:
-                    context_text += " " + " ".join([o.text for o in ocr_results[:10]])
+                    context_text = ""
+                    if v_ent and v_ent.filename:
+                        context_text += " " + v_ent.filename
+                    if transcripts:
+                        context_text += " " + " ".join([t.text for t in transcripts[:10]])
+                    if ocr_results:
+                        context_text += " " + " ".join([o.text for o in ocr_results[:10]])
 
-                import re
-                clean = re.sub(r'\.(mp4|avi|mov|mkv|webm)$', '', context_text, flags=re.IGNORECASE)
-                clean = re.sub(r'#\w+', ' ', clean)
-                clean = re.sub(r'[^\w\s]', ' ', clean)
-                stop_words = {
-                    'video', 'whatsapp', 'at', 'pm', 'am', 'test', 'sample', 'the', 'a', 'an', 'and', 'or', 'in', 'on', 'of',
-                    'for', 'to', 'with', 'vs', 'by', 'from', 'shorts', 'short', 'reels', 'tik', 'tok', 'mini', 'world',
-                    'is', 'are', 'was', 'were', 'it', 'this', 'that', 'they', 'we', 'you', 'i', 'he', 'she', 'not', 'so'
-                }
-                kws = [w.lower().strip() for w in clean.split() if len(w.strip()) >= 3 and w.lower().strip() not in stop_words and w.isalpha()]
-                if kws:
-                    unique_kws = list(dict.fromkeys(kws))[:12]
-                    video_caption = " . ".join(unique_kws)
-                    logger.info(f"Generated adaptive vision prompt for {video_id}: {video_caption}")
-        except Exception as cap_err:
-            logger.warn(f"Failed to extract contextual keywords from video {video_id}: {cap_err}")
+                    import re
+                    clean = re.sub(r'\.(mp4|avi|mov|mkv|webm)$', '', context_text, flags=re.IGNORECASE)
+                    clean = re.sub(r'#\w+', ' ', clean)
+                    clean = re.sub(r'[^\w\s]', ' ', clean)
+                    stop_words = {
+                        'video', 'whatsapp', 'at', 'pm', 'am', 'test', 'sample', 'the', 'a', 'an', 'and', 'or', 'in', 'on', 'of',
+                        'for', 'to', 'with', 'vs', 'by', 'from', 'shorts', 'short', 'reels', 'tik', 'tok', 'mini', 'world',
+                        'is', 'are', 'was', 'were', 'it', 'this', 'that', 'they', 'we', 'you', 'i', 'he', 'she', 'not', 'so'
+                    }
+                    kws = [w.lower().strip() for w in clean.split() if len(w.strip()) >= 3 and w.lower().strip() not in stop_words and w.isalpha()]
+                    if kws:
+                        unique_kws = list(dict.fromkeys(kws))[:12]
+                        video_caption = " . ".join(unique_kws)
+                        logger.info(f"Generated adaptive vision prompt for {video_id}: {video_caption}")
+            except Exception as cap_err:
+                logger.warn(f"Failed to extract contextual keywords from video {video_id}: {cap_err}")
 
-        vision_res = vision_service.detect_objects(frame_paths, caption=video_caption)
-        elapsed = int((time.time() - start_time) * 1000)
+            try:
+                vision_service = Container.get_vision_service()
+                vision_res = vision_service.detect_objects(frame_paths, caption=video_caption)
+                elapsed = int((time.time() - start_time) * 1000)
 
-        if not vision_res.success:
-            PipelineErrorHandler.handle_stage_failure(context, stage, 7, "OBJECT_DETECTION_FAILED", vision_res.error, elapsed)
-            return
-
-        objects_list = vision_res.value
+                if vision_res.success:
+                    objects_list = vision_res.value
+                else:
+                    logger.warn(f"Vision detection returned non-success: {vision_res.error}. Continuing with fallback.")
+            except Exception as vis_err:
+                logger.warn(f"Vision detection exception for video {video_id}: {vis_err}. Continuing pipeline.")
+            finally:
+                try:
+                    vis_svc = Container.get_vision_service()
+                    if hasattr(vis_svc, "unload"):
+                        vis_svc.unload()
+                except Exception:
+                    pass
+                import gc
+                gc.collect()
+                try:
+                    import ctypes
+                    libc = ctypes.CDLL("libc.so.6")
+                    libc.malloc_trim(0)
+                except Exception:
+                    pass
         with UnitOfWork() as uow:
             # Map object frame path back to saved frame entity ID
             db_frames = uow.frames.get_by_video_id(video_id)

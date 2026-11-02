@@ -11,15 +11,18 @@ ENV MKL_NUM_THREADS=1
 ENV OPENBLAS_NUM_THREADS=1
 ENV TORCH_NUM_THREADS=1
 ENV PYTHONMALLOC=malloc
+ENV LOW_MEMORY_MODE=true
 
 WORKDIR /app
 
-# Install system dependencies for OpenCV, FFmpeg, and build tools
+# Install system dependencies for OpenCV, FFmpeg, Tesseract OCR, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
     libglib2.0-0 \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-eng \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
