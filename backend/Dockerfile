@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Prevent writing pyc files and buffer streams
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -6,10 +6,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install system dependencies for OpenCV and FFmpeg
+# Install system dependencies for OpenCV, FFmpeg, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     ffmpeg \
     && apt-get clean \
@@ -23,7 +23,10 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy backend files
 COPY . /app/
 
+# Create required runtime directories
+RUN mkdir -p /app/uploads /app/outputs /app/cache /app/storage/embeddings
+
 EXPOSE 8000
 
-# Default entry execution command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Entry execution command with dynamic Render $PORT fallback
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -1,12 +1,16 @@
 import axios from "axios";
 
-// Default to port 8001 (or 8000 if cached/configured)
+// Resolve API Base URL (supports local dev and cloud deployments like Render/Vercel)
 const getInitialBaseUrl = () => {
   if (typeof window !== "undefined") {
     const saved = localStorage.getItem("videosense_backend_url");
     if (saved) return saved;
   }
-  return import.meta.env.VITE_API_URL || "http://localhost:8000";
+  let url = (import.meta.env.VITE_API_URL || "http://localhost:8000").trim();
+  if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `https://${url}`;
+  }
+  return url.replace(/\/+$/, "");
 };
 
 export let API_BASE_URL = getInitialBaseUrl();
@@ -32,12 +36,12 @@ client.interceptors.request.use((config) => {
 });
 
 // Automatic Port Failover Interceptor:
-// If connection to port 8001 or 8000 fails, test the alternate port and switch seamlessly
+// If connection to local port 8001 or 8000 fails, test the alternate port and switch seamlessly
 client.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Only attempt retry on connection error without HTTP response
-    if (!error.response && error.config && !error.config._portRetried) {
+    // Only attempt local retry on connection error without HTTP response
+    if (!error.response && error.config && !error.config._portRetried && API_BASE_URL.includes("localhost")) {
       error.config._portRetried = true;
       const currentPort = API_BASE_URL.includes("8001") ? 8001 : 8000;
       const fallbackPort = currentPort === 8001 ? 8000 : 8001;

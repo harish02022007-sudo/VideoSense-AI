@@ -9,7 +9,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   root: __dirname,
   plugins: [react()],
-  cacheDir: 'C:/Users/Harish/.vite_cache_videosense',
   optimizeDeps: {
     include: [
       'react',
