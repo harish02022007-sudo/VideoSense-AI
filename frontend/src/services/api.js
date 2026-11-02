@@ -120,6 +120,7 @@ export const api = {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      timeout: 0, // Disable Axios timeout for video file uploads (prevents timeout of 60000ms exceeded on large files)
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
           const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);

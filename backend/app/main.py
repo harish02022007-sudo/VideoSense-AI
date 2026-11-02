@@ -104,6 +104,17 @@ async def startup_event() -> None:
                     j.status = "failed"
                     j.error_message = "Server restarted before frames could be processed. Please re-upload video."
                     j.completed_at = datetime.utcnow()
+            # Restore any sample videos whose files were cleared on ephemeral container restart
+            try:
+                from app.models.analysis import Video
+                from app.infrastructure.storage.path_manager import PathManager
+                all_vids = uow.session.query(Video).all()
+                for v in all_vids:
+                    PathManager.resolve_video_file(v.id, v.filename, v.filepath)
+                logger.info(f"Verified/restored storage assets for {len(all_vids)} registered videos.")
+            except Exception as res_err:
+                logger.warning(f"Video file asset restoration deferred: {res_err}")
+
             uow.commit()
     except Exception as rec_err:
         logger.warning(f"Orphaned job recovery deferred: {rec_err}")

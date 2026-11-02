@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 import os
+import gc
 from typing import Dict, Any
 
 from fastapi import (
@@ -320,6 +321,13 @@ async def upload_video(
 
 
     saved_path = save_result.value
+
+    # Immediately release raw upload payload from memory
+    try:
+        del content
+        gc.collect()
+    except Exception:
+        pass
 
 
 
