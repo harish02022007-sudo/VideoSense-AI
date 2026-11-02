@@ -256,7 +256,9 @@ class EmbeddingWorker:
                 job = uow.jobs.get(job_id)
                 if job:
                     job.current_stage = "completed"
-                    job.status = EMBEDDING_COMPLETED
+                    job.status = "completed"
+                    job.progress = 100
+                    job.completed_at = datetime.utcnow()
                 
                 # Write log completion
                 log = ProcessingLog(

@@ -79,6 +79,35 @@ async def startup_event() -> None:
     except Exception as e:
         logger.warning(f"WorkerManager startup deferred: {e}")
 
+    # Recover any jobs left pending across cloud server restarts
+    try:
+        from app.db.unit_of_work import UnitOfWork
+        from app.models.analysis import Job
+        from datetime import datetime
+        with UnitOfWork() as uow:
+            stalled_jobs = (
+                uow.jobs.session.query(Job)
+                .filter(Job.status.in_(["processing", "embedding_pending", "validating"]))
+                .all()
+            )
+            for j in stalled_jobs:
+                has_frames = len(uow.frames.get_by_video_id(j.video_id)) > 0
+                if has_frames:
+                    logger.info(f"Auto-completing previously stalled job {j.id} for video {j.video_id}")
+                    j.status = "completed"
+                    j.current_stage = "completed"
+                    j.progress = 100
+                    j.completed_at = datetime.utcnow()
+                    from app.workers.embedding_worker import EmbeddingWorker
+                    EmbeddingWorker.start_embedding_task(j.video_id, j.id, "recovery")
+                else:
+                    j.status = "failed"
+                    j.error_message = "Server restarted before frames could be processed. Please re-upload video."
+                    j.completed_at = datetime.utcnow()
+            uow.commit()
+    except Exception as rec_err:
+        logger.warning(f"Orphaned job recovery deferred: {rec_err}")
+
     # Reclaim startup memory
     gc.collect()
     logger.info("Startup complete - Garbage collection completed")

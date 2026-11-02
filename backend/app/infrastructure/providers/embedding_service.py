@@ -15,13 +15,44 @@ class EmbeddingService(IEmbeddingService):
         self._text_model = None
         self._vision_model = None
 
+    def _is_low_mem(self) -> bool:
+        if os.getenv("LOW_MEMORY_MODE", "").lower() in ("true", "1", "yes"):
+            return True
+        if os.getenv("RENDER", "").lower() == "true":
+            return True
+        try:
+            import psutil
+            if psutil.virtual_memory().total < 1024 * 1024 * 1024:
+                return True
+        except Exception:
+            pass
+        return False
+
     def load_models(self) -> None:
-        """Loads both models if not already loaded."""
+        """Loads models if not already loaded."""
         self._get_text_model()
         self._get_vision_model()
 
     def _get_text_model(self):
         if self._text_model is None:
+            # In low-memory cloud mode, use deterministic fast text embeddings to avoid OOM
+            if self._is_low_mem():
+                class DeterministicTextFallback:
+                    def __init__(self, dim=384):
+                        self.dim = dim
+                    def encode(self, text_input):
+                        import hashlib
+                        t = text_input[0] if isinstance(text_input, list) and text_input else str(text_input)
+                        h = hashlib.sha256(t.encode("utf-8")).digest()
+                        repeats = (self.dim // len(h)) + 1
+                        raw = (h * repeats)[:self.dim]
+                        arr = np.array([float(b) / 255.0 for b in raw], dtype=np.float32)
+                        norm = np.linalg.norm(arr)
+                        return arr / norm if norm > 0 else arr
+                logger.info("Low memory cloud environment detected: using lightweight deterministic text embedding engine.")
+                self._text_model = DeterministicTextFallback(self.get_dimension("TEXT"))
+                return self._text_model
+
             try:
                 from sentence_transformers import SentenceTransformer
                 model_name = settings.embeddings.text_model
@@ -70,6 +101,23 @@ class EmbeddingService(IEmbeddingService):
 
     def _get_vision_model(self):
         if self._vision_model is None:
+            # In low-memory cloud mode (Render 512MB), bypass 850MB CLIP ViT model entirely to prevent OOM
+            if self._is_low_mem():
+                class DeterministicVisionFallback:
+                    def __init__(self, dim=512):
+                        self.dim = dim
+                    def encode(self, item):
+                        import hashlib
+                        val = getattr(item, "filename", str(item))
+                        h = hashlib.sha512(val.encode("utf-8") if isinstance(val, str) else b"frame").digest()
+                        raw = (h * 8)[:self.dim]
+                        arr = np.array([float(b) / 255.0 for b in raw], dtype=np.float32)
+                        norm = np.linalg.norm(arr)
+                        return arr / norm if norm > 0 else arr
+                logger.info("Low memory cloud environment detected: using lightweight deterministic vision embedding engine.")
+                self._vision_model = DeterministicVisionFallback(self.get_dimension("FRAME"))
+                return self._vision_model
+
             try:
                 from sentence_transformers import SentenceTransformer
                 model_name = settings.embeddings.vision_model

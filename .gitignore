@@ -86,6 +86,8 @@ backend/models/
 weights/
 checkpoints/
 *.pt
+!backend/yolo11n.pt
+!backend/models/weights/yolo11n.pt
 *.pth
 *.onnx
 

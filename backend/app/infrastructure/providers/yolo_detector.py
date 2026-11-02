@@ -26,6 +26,23 @@ class YoloObjectDetector(IObjectDetector):
         if self.weights_path and os.path.exists(self.weights_path):
             return self.weights_path
 
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_dir = os.path.abspath(os.path.join(curr_dir, "..", "..", ".."))
+
+        # In low-memory cloud mode (e.g. Render 512MB), strictly use nano weights (5.6MB, ~60MB RAM)
+        is_low_mem = (
+            os.getenv("LOW_MEMORY_MODE", "").lower() in ("true", "1", "yes")
+            or os.getenv("RENDER", "").lower() == "true"
+        )
+        if is_low_mem:
+            p1 = os.path.join(backend_dir, "models", "weights", "yolo11n.pt")
+            if os.path.exists(p1):
+                return p1
+            p2 = os.path.join(backend_dir, "yolo11n.pt")
+            if os.path.exists(p2):
+                return p2
+            return "yolo11n.pt"
+
         try:
             from app.db.unit_of_work import UnitOfWork
             with UnitOfWork() as uow:
@@ -41,9 +58,6 @@ class YoloObjectDetector(IObjectDetector):
                         return m.model_path
         except Exception as e:
             logger.debug(f"Could not resolve weights from ModelRegistry: {e}")
-
-        curr_dir = os.path.dirname(os.path.abspath(__file__))
-        backend_dir = os.path.abspath(os.path.join(curr_dir, "..", "..", ".."))
 
         # Check for local weights files
         for name in ["yolo11n.pt", "yolo11m.pt"]:
