@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // https://vite.dev/config/
 export default defineConfig({
   root: __dirname,
+  cacheDir: './.vite_cache',
   plugins: [react()],
   optimizeDeps: {
     include: [
