@@ -286,3 +286,6 @@ class EmbeddingWorker:
                 )
                 uow.processing_logs.add(log)
                 uow.commit()
+        finally:
+            import gc
+            gc.collect()

@@ -4,6 +4,14 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Memory optimizations for cloud containers (prevent glibc and PyTorch thread memory fragmentation)
+ENV MALLOC_ARENA_MAX=2
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV TORCH_NUM_THREADS=1
+ENV PYTHONMALLOC=malloc
+
 WORKDIR /app
 
 # Install system dependencies for OpenCV, FFmpeg, and build tools
@@ -29,5 +37,5 @@ RUN mkdir -p /app/uploads /app/outputs /app/cache /app/storage/embeddings
 
 EXPOSE 8000
 
-# Entry execution command with dynamic Render $PORT fallback
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Entry execution command with single-worker and concurrency limit to keep RAM < 512MB
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --limit-concurrency 10"]

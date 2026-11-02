@@ -36,6 +36,18 @@ services:
         value: cpu
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: TORCH_NUM_THREADS
+        value: "1"
+      - key: PYTHONMALLOC
+        value: "malloc"
 
   # ---------------------------------------------------------------------------
   # 2. React Vite Frontend Static Site (Global CDN - no region)

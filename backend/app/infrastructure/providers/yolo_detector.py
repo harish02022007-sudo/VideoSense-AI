@@ -43,14 +43,14 @@ class YoloObjectDetector(IObjectDetector):
 
         curr_dir = os.path.dirname(os.path.abspath(__file__))
         backend_dir = os.path.abspath(os.path.join(curr_dir, "..", "..", ".."))
-        weights_dir_yolo = os.path.join(backend_dir, "models", "weights", "yolo11m.pt")
+        weights_dir_yolo = os.path.join(backend_dir, "models", "weights", "yolo11n.pt")
         if os.path.exists(weights_dir_yolo):
             return weights_dir_yolo
-        local_yolo = os.path.join(backend_dir, "yolo11m.pt")
+        local_yolo = os.path.join(backend_dir, "yolo11n.pt")
         if os.path.exists(local_yolo):
             return local_yolo
 
-        return "yolo11m.pt"
+        return "yolo11n.pt"
 
     def initialize(self, model_name: Optional[str] = None) -> Result[None]:
         """Loads the YOLO model parameters."""

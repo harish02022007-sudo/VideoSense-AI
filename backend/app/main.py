@@ -1,5 +1,21 @@
+import os
+import gc
 import time
 from dotenv import load_dotenv
+
+# Enforce single-threaded execution to prevent memory fragmentation on multi-core cloud containers
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("TORCH_NUM_THREADS", "1")
+os.environ.setdefault("MALLOC_ARENA_MAX", "2")
+os.environ.setdefault("PYTHONMALLOC", "malloc")
+
+try:
+    import torch
+    torch.set_num_threads(1)
+except ImportError:
+    pass
 
 load_dotenv()
 
@@ -62,6 +78,10 @@ async def startup_event() -> None:
         logger.info("WorkerManager started")
     except Exception as e:
         logger.warning(f"WorkerManager startup deferred: {e}")
+
+    # Reclaim startup memory
+    gc.collect()
+    logger.info("Startup complete - Garbage collection completed")
 
 # Configure CORS middleware
 app.add_middleware(
