@@ -80,7 +80,9 @@ artifacts/
 ############################
 # ML Models
 ############################
-models/
+/models/
+backend/models/
+!backend/app/models/
 weights/
 checkpoints/
 *.pt
@@ -152,8 +154,9 @@ GroundingDINO/
 Sample_Videos/
 scratch/
 frontend/.vite_cache/
+/storage/
 backend/storage/
-storage/
+!backend/app/infrastructure/storage/
 backend/runs/
 *.mp4
 *.part
