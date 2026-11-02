@@ -100,9 +100,6 @@ class EmbeddingWorker:
                 )
                 uow.processing_logs.add(log)
                 uow.commit()
-        finally:
-            import gc
-            gc.collect()
 
             # --- B. FRAME EMBEDDING ---
             # Sort frames by frame_number to ensure consistency
@@ -267,9 +264,6 @@ class EmbeddingWorker:
                 )
                 uow.processing_logs.add(log)
                 uow.commit()
-        finally:
-            import gc
-            gc.collect()
 
             logger.info(f"Asynchronous embedding worker completed successfully for video {video_id}")
 
@@ -292,9 +286,3 @@ class EmbeddingWorker:
                 )
                 uow.processing_logs.add(log)
                 uow.commit()
-        finally:
-            import gc
-            gc.collect()
-        finally:
-            import gc
-            gc.collect()
