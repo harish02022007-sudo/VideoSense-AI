@@ -25,6 +25,7 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    import asyncio
     from app.database.session import engine, Base
     import app.models.user
     import app.models.otp
@@ -36,17 +37,31 @@ async def startup_event() -> None:
     import app.models.processing_log
     import app.models.worker
     import app.models.notification
-    Base.metadata.create_all(bind=engine)
 
-    initialize_model_registry()
-    logger.info(
-        "Model registry initialized"
-    )
+    # Resilient table creation with retries for cloud-managed PostgreSQL cold start
+    for attempt in range(5):
+        try:
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database schema initialized successfully")
+            break
+        except Exception as e:
+            if attempt == 4:
+                logger.error(f"Failed to initialize database tables after 5 attempts: {e}")
+                raise
+            logger.warning(f"Database connection attempt {attempt + 1}/5 failed ({e}). Retrying in 2 seconds...")
+            await asyncio.sleep(2)
 
-    await WorkerManager.start_worker()
-    logger.info(
-        "WorkerManager started"
-    )
+    try:
+        initialize_model_registry()
+        logger.info("Model registry initialized")
+    except Exception as e:
+        logger.warning(f"Model registry initialization deferred: {e}")
+
+    try:
+        await WorkerManager.start_worker()
+        logger.info("WorkerManager started")
+    except Exception as e:
+        logger.warning(f"WorkerManager startup deferred: {e}")
 
 # Configure CORS middleware
 app.add_middleware(

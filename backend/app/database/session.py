@@ -2,10 +2,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
 
-# Normalize PostgreSQL dialect if provided as postgres:// by cloud providers (Render/Heroku)
+# Normalize PostgreSQL dialect if provided as postgres:// or postgresql:// by cloud providers (Render/Heroku)
 db_url = settings.database.url
 if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+    db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 # SQLite-specific connection arguments
 connect_args = {}

@@ -156,7 +156,9 @@ def load_settings() -> Settings:
         db_env_url = os.getenv("DATABASE_URL")
         if db_env_url:
             if db_env_url.startswith("postgres://"):
-                db_env_url = db_env_url.replace("postgres://", "postgresql://", 1)
+                db_env_url = db_env_url.replace("postgres://", "postgresql+psycopg2://", 1)
+            elif db_env_url.startswith("postgresql://") and not db_env_url.startswith("postgresql+"):
+                db_env_url = db_env_url.replace("postgresql://", "postgresql+psycopg2://", 1)
             settings_obj.database.url = db_env_url
         return settings_obj
     except Exception as e:
