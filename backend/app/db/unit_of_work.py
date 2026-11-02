@@ -16,6 +16,7 @@ from app.repositories.config_repository import VideoProcessingConfigRepository
 from app.repositories.processing_log_repository import ProcessingLogRepository
 from app.repositories.worker_repository import WorkerRepository
 from app.repositories.pipeline_repository import PipelineExecutionRepository
+from app.repositories.summary_repository import VideoSummaryRepository
 
 class UnitOfWork:
     """Coordinates database transactions across repository layers."""
@@ -40,6 +41,7 @@ class UnitOfWork:
         self.processing_logs = ProcessingLogRepository(self.session)
         self.workers = WorkerRepository(self.session)
         self.pipeline_executions = PipelineExecutionRepository(self.session)
+        self.summaries = VideoSummaryRepository(self.session)
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:

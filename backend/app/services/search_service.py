@@ -55,7 +55,26 @@ SYNONYMS = {
     "penguin": ["penguin", "bird", "toy"],
     "bag": ["backpack", "handbag", "bag", "purse"],
     "backpack": ["backpack", "bag", "handbag"],
-    "tree": ["tree", "plant", "vegetation"]
+    "tree": ["tree", "plant", "vegetation"],
+    "cyclist": ["bicycle", "person", "cyclist", "bike"],
+    "cyclists": ["bicycle", "person", "cyclist", "cyclists", "bike"],
+    "micromobility": ["bicycle", "scooter", "motorcycle", "bike"],
+    "bus": ["bus", "transit", "public transit", "public transport"],
+    "public transit": ["bus", "train", "transit", "tram"],
+    "transit": ["bus", "train", "transit"],
+    "traffic light": ["traffic light", "signal", "traffic signal"],
+    "fire hydrant": ["fire hydrant", "hydrant"],
+    "hydrant": ["fire hydrant", "hydrant"],
+    "chair": ["chair", "seat", "bench", "patio seating"],
+    "potted plant": ["potted plant", "plant", "planter", "vegetation"],
+    "storefront": ["shop", "store", "storefront", "commercial", "cafe"],
+    "cafe": ["cafe", "restaurant", "store", "shop"],
+    "taxi": ["car", "taxi", "cab"],
+    "cab": ["car", "taxi", "cab"],
+    "pedestrian": ["person", "pedestrian", "man", "woman", "crowd"],
+    "pedestrians": ["person", "pedestrian", "people", "crowd"],
+    "infrastructure": ["traffic light", "fire hydrant", "stop sign"],
+    "street furniture": ["chair", "bench", "potted plant", "fire hydrant"]
 }
 
 def expand_query_terms(query: str) -> List[str]:

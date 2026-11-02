@@ -8,6 +8,8 @@ import VideoTimeline from "./components/timeline/VideoTimeline";
 import SemanticSearchConsole from "./components/search/SemanticSearchConsole";
 import VideoChatPanel from "./components/chat/VideoChatPanel";
 import AnalyticsDashboard from "./components/analytics/AnalyticsDashboard";
+import SummaryPage from "./components/summary/SummaryPage";
+import ProductDeliveryConsole from "./components/products/ProductDeliveryConsole";
 
 // V2.0 & V3.0 views
 import LandingPage from "./components/landing/LandingPage";
@@ -25,17 +27,30 @@ import ProfilePanel from "./components/ui/ProfilePanel";
 import FloatingAssistant from "./components/ui/FloatingAssistant";
 import CommandPalette from "./components/ui/CommandPalette";
 
-import { ArrowLeft, Brain } from "lucide-react";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ArrowLeft, Brain, Cpu, Play } from "lucide-react";
 
-export default function App() {
-  // Pre-App state manager: landing, auth, onboarding, app (defaults to app so dashboard is immediately active)
+function AppContent() {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  // Pre-App state manager: landing, auth, onboarding, app
   const [appState, setAppState] = useState(() => {
-    return localStorage.getItem("videosense_app_state") || "app";
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    return (params && params.get("appState")) || localStorage.getItem("videosense_app_state") || "app";
   });
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    return (params && params.get("tab")) || "dashboard";
+  });
   const [selectedVideoId, setSelectedVideoId] = useState(null);
   const [initialSeekTime, setInitialSeekTime] = useState(null);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  // Clear selected video whenever user session changes (login/logout/switch)
+  useEffect(() => {
+    setSelectedVideoId(null);
+    setInitialSeekTime(null);
+  }, [user?.id]);
 
   const updateAppState = (state) => {
     setAppState(state);
@@ -64,22 +79,55 @@ export default function App() {
     setActiveTab("player");
   };
 
+  // Initial loading splash screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background-dark text-gray-100 flex flex-col items-center justify-center p-6 select-none relative overflow-hidden">
+        <BackgroundBlobs />
+        <div className="z-10 flex flex-col items-center gap-4 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-400 via-primary to-purple-500 p-[1px] shadow-glow animate-pulse flex items-center justify-center">
+            <div className="w-full h-full bg-background-dark rounded-2xl flex items-center justify-center">
+              <Play className="w-6 h-6 text-cyan-400 fill-cyan-400/20" />
+            </div>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white tracking-tight">VideoSense AI</h2>
+            <p className="text-xs text-gray-400 font-mono mt-1">Initializing secure session...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Pre-App Page switchers
   if (appState === "landing") {
     return (
       <LandingPage 
-        onGetStarted={() => updateAppState("auth")} 
-        onExplore={() => updateAppState("app")} 
+        onGetStarted={() => updateAppState(isAuthenticated ? "app" : "auth")} 
+        onExplore={() => updateAppState(isAuthenticated ? "app" : "auth")} 
       />
     );
   }
 
   if (appState === "auth") {
-    return <AuthPage onLoginSuccess={() => updateAppState("onboarding")} />;
+    return (
+      <AuthPage 
+        onLoginSuccess={() => updateAppState("app")} 
+      />
+    );
   }
 
   if (appState === "onboarding") {
     return <OnboardingFlow onOnboardingComplete={() => updateAppState("app")} />;
+  }
+
+  // If user is trying to access app dashboard but is unauthenticated, redirect to auth
+  if (!isAuthenticated && appState === "app") {
+    return (
+      <AuthPage 
+        onLoginSuccess={() => updateAppState("app")} 
+      />
+    );
   }
 
   return (
@@ -88,7 +136,17 @@ export default function App() {
       <BackgroundBlobs />
 
       {/* Floating Header */}
-      <Navbar />
+      <Navbar 
+        activeTab={activeTab} 
+        onNavigate={(tab) => {
+          if (tab === "auth") {
+            updateAppState("auth");
+          } else {
+            setActiveTab(tab);
+          }
+        }} 
+        onSignOut={() => updateAppState("auth")}
+      />
 
       {/* Main Body Grid */}
       <div className="flex flex-1">
@@ -137,6 +195,14 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === "summary" && (
+            <SummaryPage 
+              selectedVideoId={selectedVideoId} 
+              onSelectVideo={handleSelectVideo}
+              onNavigate={setActiveTab}
+            />
+          )}
+
           {activeTab === "processing" && (
             <AIProcessingConsole onSelectVideo={handleSelectVideo} onNavigate={setActiveTab} />
           )}
@@ -157,46 +223,13 @@ export default function App() {
             />
           )}
 
-          {/* Product Discovery matching cards */}
+          {/* Visual Product Discovery & Delivery Logistics */}
           {activeTab === "products" && (
-            <div className="max-w-5xl mx-auto space-y-6">
-              <div>
-                <h2 className="text-3xl font-extrabold tracking-tight text-white">Visual Product Discovery</h2>
-                <p className="text-gray-400 mt-2 text-sm">
-                  Detected shoe, clothing, and item frames matched against a local e-commerce vector repository.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                {[
-                  { name: "Retro Run Sneaker", brand: "SpeedForce", similarity: 94, category: "Shoes", price: "$120" },
-                  { name: "Urban Tech Backpack", brand: "Cortex", similarity: 89, category: "Bags", price: "$85" },
-                  { name: "Smart POS Display Panel", brand: "BytePOS", similarity: 81, category: "Electronics", price: "$340" }
-                ].map((prod, idx) => (
-                  <div key={idx} className="glass-panel-glow border-white/[0.04] p-4 space-y-4">
-                    <div className="aspect-square rounded-xl bg-black/40 flex items-center justify-center relative border border-white/5 overflow-hidden">
-                      <span className="absolute top-2 left-2 text-[10px] font-mono font-bold bg-secondary/10 text-secondary border border-secondary/25 px-2 py-0.5 rounded">
-                        {prod.similarity}% Similarity
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-gray-500 font-mono uppercase">{prod.brand}</span>
-                        <span className="text-cyan-400 text-xs font-bold font-mono">{prod.price}</span>
-                      </div>
-                      <h4 className="text-sm font-bold text-white leading-snug">{prod.name}</h4>
-                      <p className="text-[10px] text-gray-400">{prod.category}</p>
-                    </div>
-                    <button 
-                      onClick={() => alert(`Redirecting to catalog detail for ${prod.name}`)}
-                      className="w-full btn-glass py-2 text-xs font-bold flex items-center justify-center gap-1.5"
-                    >
-                      Inspect Catalog Item
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ProductDeliveryConsole 
+              selectedVideoId={selectedVideoId} 
+              onSelectVideo={handleSelectVideo}
+              onNavigate={setActiveTab}
+            />
           )}
 
           {activeTab === "analytics" && (
@@ -207,15 +240,31 @@ export default function App() {
             />
           )}
 
-          {activeTab === "reports" && <ReportsManager />}
+          {activeTab === "reports" && (
+            <ReportsManager 
+              selectedVideoId={selectedVideoId} 
+              onSelectVideo={handleSelectVideo} 
+              onNavigate={setActiveTab} 
+            />
+          )}
 
-          {activeTab === "notifications" && <NotificationCenter />}
+          {activeTab === "notifications" && (
+            <NotificationCenter 
+              onNavigate={setActiveTab} 
+              onSelectVideo={handleSelectVideo} 
+            />
+          )}
 
-          {activeTab === "models" && <AIModels />}
+          {activeTab === "models" && <AIModels onNavigate={setActiveTab} />}
 
           {activeTab === "monitor" && <SystemMonitor />}
 
-          {activeTab === "logs" && <ActivityLogs />}
+          {activeTab === "logs" && (
+            <ActivityLogs 
+              onSelectVideo={handleSelectVideo} 
+              onNavigate={setActiveTab} 
+            />
+          )}
 
           {activeTab === "profile" && <ProfilePanel />}
 
@@ -233,5 +282,13 @@ export default function App() {
         onNavigate={setActiveTab} 
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

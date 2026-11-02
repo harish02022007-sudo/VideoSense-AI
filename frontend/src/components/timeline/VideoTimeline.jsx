@@ -8,6 +8,7 @@ import {
   Download, ArrowLeftRight, SkipBack, SkipForward, ArrowUpDown, Check, RefreshCw
 } from "lucide-react";
 import api, { API_BASE_URL } from "../../services/api";
+import AIVideoSummary from "../summary/AIVideoSummary";
 
 export default function VideoTimeline({ videoId, initialSeekTime = null, onClearSeekTime = null }) {
   const [currentVideoId, setCurrentVideoId] = useState(videoId || null);
@@ -457,6 +458,22 @@ export default function VideoTimeline({ videoId, initialSeekTime = null, onClear
     a.click();
     a.remove();
   };
+
+  if (!isLoading && videoList.length === 0) {
+    return (
+      <div className="glass-panel p-12 text-center border-dashed border-white/10 space-y-4 max-w-2xl mx-auto my-12">
+        <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mx-auto text-cyan-400">
+          <Film className="w-8 h-8" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold text-white">No Videos in Your Account</h3>
+          <p className="text-xs text-gray-400 max-w-md mx-auto">
+            You have not uploaded any videos yet. Upload a video file to run AI perception, track objects, and explore synchronized keyframe timelines.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 select-none pb-12 max-w-7xl mx-auto">
@@ -1195,6 +1212,7 @@ export default function VideoTimeline({ videoId, initialSeekTime = null, onClear
             {/* Tabs Header */}
             <div className="flex border-b border-white/[0.06] p-1.5 bg-black/30 overflow-x-auto scrollbar-none">
               {[
+                { key: "summary", label: "AI Video Summary", icon: Sparkles },
                 { key: "objects", label: `Detected Objects (${objectDetections.length})`, icon: Crosshair },
                 { key: "transcript", label: `Whisper Speech (${transcriptSegments.length})`, icon: Clock },
                 { key: "ocr", label: `Screen Text OCR (${ocrResults.length})`, icon: Tag },
@@ -1220,8 +1238,18 @@ export default function VideoTimeline({ videoId, initialSeekTime = null, onClear
             </div>
 
             {/* Tab Contents */}
-            <div className="p-5 max-h-[480px] overflow-y-auto scrollbar-thin">
+            <div className="p-5 max-h-[560px] overflow-y-auto scrollbar-thin">
               
+              {/* ---------------------------------------------------- */}
+              {/* Tab 0: AI Multimodal Video Summary                   */}
+              {/* ---------------------------------------------------- */}
+              {activeTab === "summary" && (
+                <AIVideoSummary 
+                  videoId={currentVideoId} 
+                  onSeek={(t) => handleSeek(t)} 
+                />
+              )}
+
               {/* ---------------------------------------------------- */}
               {/* Tab 1: Grounding DINO Objects with Search & Filter   */}
               {/* ---------------------------------------------------- */}

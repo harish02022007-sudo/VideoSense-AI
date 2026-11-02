@@ -403,6 +403,16 @@ export default function VideoChatPanel({
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
         setMessages((prev) => [...prev, assistantMessage]);
+
+      // Audit user chat inquiry in activity stream
+      api.logActivityEvent({
+        category: "chat",
+        stage: "conversational_rag",
+        severity: "INFO",
+        title: `AI Video Inquiry (${activePersona}): "${queryText.slice(0, 45)}${queryText.length > 45 ? "..." : ""}"`,
+        description: `Queried multimodal RAG for video ${currentVideoId || "all"}. Response generated with ${(res.citations || []).length} citations.`,
+        videoId: currentVideoId || null
+      }).catch(() => {});
         setIsTyping(false);
         return;
       } catch (detErr) {
@@ -449,6 +459,16 @@ export default function VideoChatPanel({
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Audit user chat inquiry in activity stream
+      api.logActivityEvent({
+        category: "chat",
+        stage: "conversational_rag",
+        severity: "INFO",
+        title: `AI Video Inquiry (${activePersona}): "${queryText.slice(0, 45)}${queryText.length > 45 ? "..." : ""}"`,
+        description: `Queried multimodal RAG for video ${currentVideoId || "all"}. Response generated with ${(res.citations || []).length} citations.`,
+        videoId: currentVideoId || null
+      }).catch(() => {});
 
       // If Text-To-Speech is active, read the summary sentence aloud
       if (ttsEnabled && 'speechSynthesis' in window) {

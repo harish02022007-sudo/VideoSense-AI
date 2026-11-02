@@ -86,3 +86,36 @@ class PipelineErrorHandler:
             error_code=error_code,
             error_message=error_message
         ))
+
+        # 6. Dispatch persistent failure notification
+        try:
+            from app.services.notification_service import NotificationService
+            v_title = "video"
+            u_id = None
+            with UnitOfWork() as uow:
+                v = uow.videos.get(context.video_id)
+                if v:
+                    v_title = v.filename
+                    u_id = v.user_id
+
+            NotificationService.create_notification(
+                event_id=f"job_{context.job_id}_failed",
+                event_type="pipeline_failed",
+                category="system",
+                title=f"Processing Failed: {stage.value.replace('_', ' ').title()}",
+                message=f'Analysis failed during {stage.value} for "{v_title}": {error_message}',
+                severity="critical",
+                user_id=u_id,
+                resource_type="video",
+                resource_id=context.video_id,
+                action_tab="player",
+                action_label="Review Job",
+                metadata={
+                    "stage": stage.value,
+                    "errorCode": error_code,
+                    "errorMessage": error_message,
+                    "jobId": context.job_id
+                }
+            )
+        except Exception as notif_err:
+            logger.warning(f"Could not dispatch pipeline_failed notification: {notif_err}")

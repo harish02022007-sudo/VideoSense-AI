@@ -87,6 +87,28 @@ class PipelineService:
                 )
                 return
             video_path = video.filepath
+            video_user_id = video.user_id
+            video_filename = video.filename
+
+        # Emit pipeline started event
+        try:
+            from app.services.notification_service import NotificationService
+            NotificationService.create_notification(
+                event_id=f"job_{job_id}_started",
+                event_type="pipeline_started",
+                category="processing",
+                title="Video Analysis Started",
+                message=f'AI analysis pipeline started for "{video_filename}". Processing jobs are now actively running.',
+                severity="info",
+                user_id=video_user_id,
+                resource_type="video",
+                resource_id=video_id,
+                action_tab="player",
+                action_label="View Processing",
+                metadata={"jobId": job_id, "videoTitle": video_filename}
+            )
+        except Exception as notif_err:
+            logger.warning(f"Could not dispatch pipeline_started notification: {notif_err}")
 
         # -------------------------------------------------------------
         # STAGE 1: METADATA EXTRACTION
@@ -184,6 +206,27 @@ class PipelineService:
             job_id,
             "frames_completed"
         )
+
+        # Emit frame extraction event
+        try:
+            from app.services.notification_service import NotificationService
+            NotificationService.create_notification(
+                event_id=f"job_{job_id}_frames",
+                event_type="frames_extracted",
+                category="processing",
+                title="Frame Extraction Completed",
+                message=f'Frame extraction completed for "{video_filename}". Extracted {len(frame_paths)} keyframes for model inference.',
+                severity="info",
+                user_id=video_user_id,
+                resource_type="video",
+                resource_id=video_id,
+                action_tab="player",
+                action_label="View Frames",
+                model_name="FFmpeg Keyframe Sampler",
+                metadata={"framesExtracted": len(frame_paths), "intervalSec": interval, "jobId": job_id}
+            )
+        except Exception as notif_err:
+            logger.warning(f"Could not dispatch frames_extracted notification: {notif_err}")
 
         # -------------------------------------------------------------
         # STAGE 3: AUDIO EXTRACTION (FFmpeg Strip)
@@ -449,9 +492,14 @@ class PipelineService:
             # Map object frame path back to saved frame entity ID
             db_frames = uow.frames.get_by_video_id(video_id)
             frame_map = {f.filepath: f.id for f in db_frames}
+            frame_time_map = {f.filepath: ((f.timestamp_offset_ms or 0.0) / 1000.0) for f in db_frames}
             
             for obj in objects_list:
                 frame_id = frame_map.get(obj["frame_path"])
+                frame_ts = frame_time_map.get(obj["frame_path"], 0.0)
+                obj_ts = obj.get("first_seen_timestamp") or frame_ts
+                if obj_ts == 0.0 and frame_ts > 0.0:
+                    obj_ts = frame_ts
                 object_entity = Object(
                     id=str(uuid.uuid4()),
                     video_id=video_id,
@@ -463,8 +511,8 @@ class PipelineService:
                     box_x_max=obj["box_x_max"],
                     box_y_max=obj["box_y_max"],
                     tracking_id=obj["tracking_id"],
-                    first_seen_timestamp=obj["first_seen_timestamp"],
-                    last_seen_timestamp=obj["last_seen_timestamp"]
+                    first_seen_timestamp=obj_ts,
+                    last_seen_timestamp=obj.get("last_seen_timestamp") or obj_ts
                 )
                 uow.objects.add(object_entity)
             uow.commit()
@@ -478,6 +526,40 @@ class PipelineService:
             job_id,
             "objects_completed"
         )
+
+        # Emit object detection event
+        try:
+            from collections import Counter
+            from app.services.notification_service import NotificationService
+            label_counts = Counter(o["class_label"] for o in objects_list)
+            top_classes = label_counts.most_common(4)
+            if top_classes:
+                detection_breakdown = ", ".join([f"{cnt} {lbl}" for lbl, cnt in top_classes])
+            else:
+                detection_breakdown = "0 qualifying detections"
+
+            NotificationService.create_notification(
+                event_id=f"job_{job_id}_objects",
+                event_type="objects_detected",
+                category="processing",
+                title="Object Detection Completed",
+                message=f'Object perception finished for "{video_filename}". Identified {len(objects_list)} detections ({detection_breakdown}).',
+                severity="success" if len(objects_list) > 0 else "info",
+                user_id=video_user_id,
+                resource_type="video",
+                resource_id=video_id,
+                action_tab="search",
+                action_label="Search Objects",
+                model_name="YOLOv11 Object Tracker",
+                metadata={
+                    "totalDetections": len(objects_list),
+                    "uniqueLabels": len(label_counts),
+                    "labelBreakdown": dict(top_classes),
+                    "jobId": job_id
+                }
+            )
+        except Exception as notif_err:
+            logger.warning(f"Could not dispatch objects_detected notification: {notif_err}")
 
 
         # -------------------------------------------------------------
@@ -544,6 +626,35 @@ class PipelineService:
             job_id,
             "pipeline_completed"
         )
+
+        # Emit pipeline completed event
+        try:
+            from app.services.notification_service import NotificationService
+            with UnitOfWork() as uow:
+                f_count = len(uow.frames.get_by_video_id(video_id))
+                o_count = len(uow.objects.get_by_video_id(video_id))
+
+            NotificationService.create_notification(
+                event_id=f"job_{job_id}_completed",
+                event_type="pipeline_completed",
+                category="processing",
+                title="Video Pipeline Completed",
+                message=f'End-to-end multimodal pipeline completed for "{video_filename}". Processed {f_count} frames and indexed {o_count} object detections.',
+                severity="success",
+                user_id=video_user_id,
+                resource_type="video",
+                resource_id=video_id,
+                action_tab="summary",
+                action_label="View Summary",
+                model_name="VideoSense Multimodal Engine",
+                metadata={
+                    "framesProcessed": f_count,
+                    "totalDetections": o_count,
+                    "jobId": job_id
+                }
+            )
+        except Exception as notif_err:
+            logger.warning(f"Could not dispatch pipeline_completed notification: {notif_err}")
 
         # Set job stage status to queued for embedding, then dispatch background task
         with UnitOfWork() as uow:

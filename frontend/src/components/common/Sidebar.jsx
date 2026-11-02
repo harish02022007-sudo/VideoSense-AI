@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { 
   LayoutDashboard, UploadCloud, Video, Zap, Play, Search, MessageSquare, 
   ShoppingBag, BarChart3, FileText, Bell, Cpu, Monitor, Terminal, User, Settings2,
-  ChevronLeft, ChevronRight, HardDrive
+  ChevronLeft, ChevronRight, HardDrive, Sparkles
 } from "lucide-react";
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -21,10 +21,11 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     {
       title: "AI Engines",
       items: [
+        { id: "summary", label: "AI Video Summary", icon: Sparkles },
         { id: "processing", label: "AI Processing", icon: Zap },
         { id: "search", label: "Semantic Search", icon: Search },
         { id: "chat", label: "AI Chat", icon: MessageSquare },
-        { id: "products", label: "Product Discovery", icon: ShoppingBag }
+        { id: "products", label: "Product & Delivery", icon: ShoppingBag }
       ]
     },
     {

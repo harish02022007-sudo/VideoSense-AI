@@ -3,11 +3,13 @@ import glob
 import uuid
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import FileResponse
 
 from app.db.unit_of_work import UnitOfWork
 from app.models.analysis import Object
+from app.models.user import User
+from app.core.dependencies import get_optional_current_user
 from app.core.container import Container
 from app.core.exceptions import ValidationError
 from app.schemas.common import ResponseEnvelope
@@ -123,13 +125,19 @@ async def get_video_thumbnail(id: str):
 
 
 @router.get("/{id}/frames", response_model=ResponseEnvelope[List[Dict[str, Any]]])
-async def get_video_frames(id: str, request: Request):
+async def get_video_frames(
+    id: str,
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
     """Returns all extracted keyframes with timestamps, image URLs, and detected objects with bounding boxes."""
     request_id = getattr(request.state, "request_id", "N/A")
     with UnitOfWork() as uow:
         video = uow.videos.get(id)
         if not video:
             raise ValidationError(f"Video with ID {id} not found.")
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied: You do not have permission to view this video's keyframes.")
 
         frames = uow.frames.get_by_video_id(id)
         objects = uow.objects.get_by_video_id(id)
@@ -176,13 +184,19 @@ async def get_video_frames(id: str, request: Request):
 
 
 @router.get("/{id}/summary", response_model=ResponseEnvelope[Dict[str, Any]])
-async def get_video_summary(id: str, request: Request):
+async def get_video_summary(
+    id: str,
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
     """Compiles intelligence summaries from processed transcripts, OCR matches, and Grounding DINO objects."""
     request_id = getattr(request.state, "request_id", "N/A")
     with UnitOfWork() as uow:
         video = uow.videos.get(id)
         if not video:
             raise ValidationError(f"Video with ID {id} not found.")
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied: You do not have permission to view this video's summary.")
 
         ocr_count = len(uow.ocr_results.get_by_video_id(id))
         objects = uow.objects.get_by_video_id(id)
@@ -212,13 +226,19 @@ async def get_video_summary(id: str, request: Request):
 
 
 @router.get("/{id}/timeline", response_model=ResponseEnvelope[List[Dict[str, Any]]])
-async def get_video_timeline(id: str, request: Request):
+async def get_video_timeline(
+    id: str,
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
     """Returns chronological timeline segment mapping records."""
     request_id = getattr(request.state, "request_id", "N/A")
     with UnitOfWork() as uow:
         video = uow.videos.get(id)
         if not video:
             raise ValidationError(f"Video with ID {id} not found.")
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied: You do not have permission to view this video's timeline.")
 
         scenes = uow.scenes.get_by_video_id(id)
         timeline_segments = []
@@ -240,13 +260,19 @@ async def get_video_timeline(id: str, request: Request):
 
 
 @router.get("/{id}/insights", response_model=ResponseEnvelope[Dict[str, Any]])
-async def get_video_insights(id: str, request: Request):
+async def get_video_insights(
+    id: str,
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
     """Returns aggregated multimodal insights: transcripts, objects with bounding boxes, OCR text, and scenes."""
     request_id = getattr(request.state, "request_id", "N/A")
     with UnitOfWork() as uow:
         video = uow.videos.get(id)
         if not video:
             raise ValidationError(f"Video with ID {id} not found.")
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied: You do not have permission to view this video's insights.")
 
         # 1. Transcripts
         transcripts = uow.transcripts.get_by_video_id(id)
@@ -355,7 +381,12 @@ class DetectCustomClassesRequest(BaseModel):
 
 
 @router.post("/{id}/detect-custom", response_model=ResponseEnvelope[Dict[str, Any]])
-def detect_custom_classes(id: str, payload: DetectCustomClassesRequest, request: Request):
+def detect_custom_classes(
+    id: str,
+    payload: DetectCustomClassesRequest,
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
     """
     Runs on-demand Grounding DINO detection for user-specified custom classes on video keyframes.
     Saves new detections to the database and returns the detected objects.
@@ -369,6 +400,8 @@ def detect_custom_classes(id: str, payload: DetectCustomClassesRequest, request:
         video = uow.videos.get(id)
         if not video:
             raise ValidationError(f"Video with ID {id} not found.")
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied: You do not own this video.")
         frames = sorted(uow.frames.get_by_video_id(id), key=lambda f: f.frame_number)
         frame_map = {f.filepath: f.id for f in frames}
         frame_paths = [f.filepath for f in frames if os.path.exists(f.filepath)]

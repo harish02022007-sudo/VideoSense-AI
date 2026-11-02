@@ -191,6 +191,16 @@ export default function SemanticSearchConsole({ selectedVideoId = null, onSelect
       setResultVideoFilter("ALL");
       setSelectedTagFilter("ALL");
       setTimeRangeFilter({ min: 0, max: 9999 });
+
+      // Audit user search in activity stream
+      api.logActivityEvent({
+        category: "search",
+        stage: "semantic_query",
+        severity: "INFO",
+        title: `Semantic Search Executed: "${q.slice(0, 40)}"`,
+        description: `Searched modality ${activeMod} (limit ${topK}). Returned ${(data || []).length} matches.`,
+        videoId: targetVideoId === "ALL" ? null : targetVideoId
+      }).catch(() => {});
     } catch (err) {
       console.error("Search error:", err);
       setError("Failed to execute multimodal search. Please verify backend connection.");

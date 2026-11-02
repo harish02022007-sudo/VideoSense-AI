@@ -1,4 +1,8 @@
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -21,6 +25,18 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    from app.database.session import engine, Base
+    import app.models.user
+    import app.models.otp
+    import app.models.analysis
+    import app.models.summary
+    import app.models.embedding
+    import app.models.processing_config
+    import app.models.pipeline
+    import app.models.processing_log
+    import app.models.worker
+    import app.models.notification
+    Base.metadata.create_all(bind=engine)
 
     initialize_model_registry()
     logger.info(

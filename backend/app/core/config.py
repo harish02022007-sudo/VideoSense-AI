@@ -122,6 +122,15 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        parent_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+        if os.path.exists(parent_env):
+            load_dotenv(parent_env)
+    except Exception:
+        pass
+
     # Environment profile resolution (.env override compatible)
     env = os.getenv("VIDEOSENSE_ENV", os.getenv("ENV", "development")).lower()
     
@@ -137,7 +146,11 @@ def load_settings() -> Settings:
         with open(config_path, "r") as f:
             config_data = yaml.safe_load(f)
             
-        return Settings.model_validate(config_data)
+        settings_obj = Settings.model_validate(config_data)
+        db_env_url = os.getenv("DATABASE_URL")
+        if db_env_url:
+            settings_obj.database.url = db_env_url
+        return settings_obj
     except Exception as e:
         print(f"Error loading configuration from {config_path}: {e}. Loading default Settings.")
         return Settings()

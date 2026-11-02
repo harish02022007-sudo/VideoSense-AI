@@ -9,8 +9,13 @@ from fastapi import (
     File,
     Form,
     BackgroundTasks,
-    Request
+    Request,
+    Depends,
+    HTTPException
 )
+from typing import Optional
+from app.models.user import User
+from app.core.dependencies import get_optional_current_user
 
 from app.core.container import Container
 from app.db.unit_of_work import UnitOfWork
@@ -244,7 +249,8 @@ async def upload_video(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    title: str = Form(None)
+    title: str = Form(None),
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
 
@@ -337,7 +343,9 @@ async def upload_video(
 
                 size_bytes=size_bytes,
 
-                sha256_hash=checksum
+                sha256_hash=checksum,
+
+                user_id=current_user.id if current_user else None
             )
 
 
@@ -363,6 +371,31 @@ async def upload_video(
 
 
             uow.commit()
+
+        # Emit real video upload event
+        try:
+            from app.services.notification_service import NotificationService
+            NotificationService.create_notification(
+                event_id=f"video_{video_id}_uploaded",
+                event_type="video_uploaded",
+                category="processing",
+                title="Video Uploaded Successfully",
+                message=f'Your video "{filename}" ({round(size_bytes / (1024 * 1024), 2)} MB) was uploaded and queued for processing.',
+                severity="info",
+                user_id=current_user.id if current_user else None,
+                resource_type="video",
+                resource_id=video_id,
+                action_tab="player",
+                action_label="Open Video",
+                metadata={
+                    "filename": filename,
+                    "sizeMB": round(size_bytes / (1024 * 1024), 2),
+                    "jobId": job_id,
+                    "mimeType": file.content_type
+                }
+            )
+        except Exception as notif_err:
+            logger.warning(f"Could not dispatch upload notification: {notif_err}")
 
 
 
@@ -424,30 +457,45 @@ async def upload_video(
     "",
     response_model=ResponseEnvelope[Any]
 )
-async def list_videos(request: Request):
+async def list_videos(
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
     request_id = getattr(request.state, "request_id", "N/A")
+    if not current_user:
+        return ResponseEnvelope(
+            success=True,
+            message="No videos found for unauthenticated session.",
+            data=[],
+            request_id=request_id
+        )
+
     with UnitOfWork() as uow:
-        videos = uow.videos.list()
+        videos = uow.session.query(Video).filter(Video.user_id == current_user.id).all()
         from datetime import datetime
         videos.sort(key=lambda x: x.uploaded_at or datetime.min, reverse=True)
 
-        # Batch counts across videos to avoid N+1 queries
-        try:
-            obj_counts = dict(uow.session.query(Object.video_id, func.count(Object.id)).group_by(Object.video_id).all())
-        except Exception:
-            obj_counts = {}
-        try:
-            ocr_counts = dict(uow.session.query(OCRResult.video_id, func.count(OCRResult.id)).group_by(OCRResult.video_id).all())
-        except Exception:
-            ocr_counts = {}
-        try:
-            transcript_counts = dict(uow.session.query(Transcript.video_id, func.count(Transcript.id)).group_by(Transcript.video_id).all())
-        except Exception:
-            transcript_counts = {}
-        try:
-            frame_counts = dict(uow.session.query(Frame.video_id, func.count(Frame.id)).group_by(Frame.video_id).all())
-        except Exception:
-            frame_counts = {}
+        # Batch counts across user's videos to avoid N+1 queries
+        user_vid_ids = [v.id for v in videos]
+        if user_vid_ids:
+            try:
+                obj_counts = dict(uow.session.query(Object.video_id, func.count(Object.id)).filter(Object.video_id.in_(user_vid_ids)).group_by(Object.video_id).all())
+            except Exception:
+                obj_counts = {}
+            try:
+                ocr_counts = dict(uow.session.query(OCRResult.video_id, func.count(OCRResult.id)).filter(OCRResult.video_id.in_(user_vid_ids)).group_by(OCRResult.video_id).all())
+            except Exception:
+                ocr_counts = {}
+            try:
+                transcript_counts = dict(uow.session.query(Transcript.video_id, func.count(Transcript.id)).filter(Transcript.video_id.in_(user_vid_ids)).group_by(Transcript.video_id).all())
+            except Exception:
+                transcript_counts = {}
+            try:
+                frame_counts = dict(uow.session.query(Frame.video_id, func.count(Frame.id)).filter(Frame.video_id.in_(user_vid_ids)).group_by(Frame.video_id).all())
+            except Exception:
+                frame_counts = {}
+        else:
+            obj_counts, ocr_counts, transcript_counts, frame_counts = {}, {}, {}, {}
 
         results = []
         for v in videos:
@@ -490,30 +538,17 @@ async def list_videos(request: Request):
 )
 async def get_video_details(
     id: str,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
-
-
-    request_id = getattr(
-        request.state,
-        "request_id",
-        "N/A"
-    )
-
-
-
+    request_id = getattr(request.state, "request_id", "N/A")
     with UnitOfWork() as uow:
-
-
         video = uow.videos.get(id)
-
-
-
         if not video:
+            raise ValidationError(f"Video {id} not found")
 
-            raise ValidationError(
-                f"Video {id} not found"
-            )
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
 
@@ -574,7 +609,8 @@ async def get_video_details(
 async def configure_processing(
     id: str,
     config: VideoProcessingConfigDTO,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
     request_id = getattr(
@@ -595,6 +631,9 @@ async def configure_processing(
             raise ValidationError(
                 f"Video {id} not found"
             )
+
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
 
@@ -703,7 +742,8 @@ async def configure_processing(
 )
 async def start_processing(
     id: str,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
 
@@ -727,6 +767,9 @@ async def start_processing(
             raise ValidationError(
                 f"Video {id} not found"
             )
+
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
 
@@ -844,7 +887,8 @@ async def start_processing(
 )
 async def get_processing_status(
     id: str,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
 
@@ -867,6 +911,9 @@ async def get_processing_status(
             raise ValidationError(
                 f"Video {id} not found"
             )
+
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
 
@@ -940,7 +987,8 @@ async def get_processing_status(
 )
 async def get_video_artifacts(
     id: str,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
 
@@ -968,6 +1016,9 @@ async def get_video_artifacts(
             raise ValidationError(
                 "Video not found"
             )
+
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
 
@@ -1044,7 +1095,8 @@ async def get_video_artifacts(
 )
 async def get_video_analytics(
     id: str,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
 
@@ -1067,6 +1119,9 @@ async def get_video_analytics(
             raise ValidationError(
                 "Video not found"
             )
+
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
 
@@ -1145,7 +1200,8 @@ async def get_video_analytics(
 )
 async def generate_preview(
     id: str,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
 
@@ -1169,6 +1225,9 @@ async def generate_preview(
             raise ValidationError(
                 "Video not found"
             )
+
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
         path = video.filepath
@@ -1221,7 +1280,8 @@ async def generate_preview(
 )
 async def get_preview(
     id: str,
-    request: Request
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
 
 
@@ -1235,6 +1295,13 @@ async def get_preview(
     from app.infrastructure.storage.artifact_manager import (
         ArtifactManager
     )
+
+    with UnitOfWork() as uow:
+        video = uow.videos.get(id)
+        if not video:
+            raise ValidationError("Video not found")
+        if video.user_id and (not current_user or video.user_id != current_user.id):
+            raise HTTPException(status_code=403, detail="Access denied to this video.")
 
 
     thumb = ArtifactManager.get_artifact_path(

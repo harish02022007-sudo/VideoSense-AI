@@ -1,0 +1,15 @@
+path: D:/VsCode/Sem Project/Sem 5 Project/Proj/VideoSense AI/backend/datasets/indian_traffic
+train: images/train
+val: images/val
+names:
+  0: auto_rickshaw
+  1: motorcycle
+  2: bicycle
+  3: person
+  4: child
+  5: cow
+  6: car
+  7: bus
+  8: truck
+  9: shop_stall
+nc: 10

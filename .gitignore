@@ -9,6 +9,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+venv/
+.venv/
 backend/.venv/
 backend/venv/
 backend/env/
@@ -157,4 +159,6 @@ backend/runs/
 *.part
 summary.zip
 .git_test/
-.git_backup/
+.git_backup/
+
+.git_old/

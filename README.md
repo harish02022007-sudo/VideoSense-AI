@@ -4,6 +4,11 @@ An Intelligent Multimodal Video Understanding, Search, Analytics, and Visual Pro
 
 VideoSense AI uses Computer Vision, Natural Language Processing, and Agentic AI to analyze, index, search, and chat with video feeds.
 
+### Key Capabilities
+- **Multimodal Video Summarization**: Generates Visual-Only & Audio-Visual executive summaries, key events timeline with interactive video player seeking, and chronological chapters. ([Read Documentation](docs/MULTIMODAL_SUMMARIZATION.md))
+- **Multimodal Semantic Search**: Natural-language cross-modal video search.
+- **AI Video Chat & Dossier**: Conversational intelligence and security briefs with temporal citations.
+
 ---
 
 ## Folder Structure

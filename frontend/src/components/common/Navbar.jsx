@@ -1,11 +1,42 @@
-import React, { useState, useEffect } from "react";
-import { Play, Activity, Bell, Cpu, LayoutGrid, ChevronDown, Clock, Search, ShieldCheck } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Play,
+  Activity,
+  Bell,
+  Cpu,
+  LayoutGrid,
+  ChevronDown,
+  Clock,
+  Search,
+  ShieldCheck,
+  User,
+  LogOut,
+  Settings,
+  LogIn,
+  Key
+} from "lucide-react";
 import api from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
-export default function Navbar() {
+export default function Navbar({ activeTab, onNavigate, onSignOut }) {
+  const { user, isAuthenticated, logout } = useAuth();
   const [health, setHealth] = useState(null);
   const [latency, setLatency] = useState(0);
   const [currentTime, setCurrentTime] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Clock ticks
   useEffect(() => {
@@ -15,6 +46,33 @@ export default function Navbar() {
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Poll dynamic unread notifications count from API
+  useEffect(() => {
+    const checkUnread = async () => {
+      try {
+        const stats = await api.getNotificationStats();
+        if (stats && typeof stats.unread === "number") {
+          setUnreadCount(stats.unread);
+          try {
+            localStorage.setItem("videosense_unread_count", String(stats.unread));
+          } catch (e) {}
+          return;
+        }
+      } catch (err) {
+        // Fallback to cached count if backend unreachable
+        try {
+          const cached = localStorage.getItem("videosense_unread_count");
+          if (cached !== null) {
+            setUnreadCount(parseInt(cached, 10) || 0);
+          }
+        } catch (e) {}
+      }
+    };
+    checkUnread();
+    const interval = setInterval(checkUnread, 4000);
     return () => clearInterval(interval);
   }, []);
 
@@ -37,11 +95,29 @@ export default function Navbar() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleLogout = async () => {
+    setIsProfileMenuOpen(false);
+    await logout();
+    if (onSignOut) {
+      onSignOut();
+    }
+  };
+
   const getStatusColor = () => {
     if (!health) return "bg-gray-500 shadow-gray-500/50";
     if (health.status === "healthy") return "bg-status-success shadow-status-success/50 animate-pulse";
     if (health.status === "degraded") return "bg-status-warning shadow-status-warning/50 animate-pulse";
     return "bg-status-offline shadow-status-offline/50";
+  };
+
+  const getInitials = (name) => {
+    if (!name) return "U";
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   return (
@@ -65,7 +141,9 @@ export default function Navbar() {
         <div className="hidden sm:flex items-center gap-2 border-l border-white/10 pl-6">
           <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-all border border-transparent hover:border-white/5">
             <LayoutGrid className="w-3.5 h-3.5 text-gray-400" />
-            <span className="text-xs text-gray-300 font-medium">Personal Workspace</span>
+            <span className="text-xs text-gray-300 font-medium">
+              {user ? `${user.full_name.split(' ')[0]}'s Workspace` : "Default Workspace"}
+            </span>
             <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
           </div>
         </div>
@@ -79,7 +157,7 @@ export default function Navbar() {
       </div>
 
       {/* Diagnostics / Right Section */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4 sm:gap-6">
         {/* Hardware Status */}
         {health && (
           <div className="hidden xl:flex items-center gap-4 text-xs font-mono border-r border-white/10 pr-6">
@@ -110,25 +188,103 @@ export default function Navbar() {
         {/* Dynamic connection pinger dot */}
         <div className="flex items-center gap-3">
           <div className="relative flex items-center justify-center">
-            <span className={`w-2.5 h-2.5 rounded-full ${getStatusColor()} shadow-sm`}></span>
+            <span className={`w-2.5 h-2.5 rounded-full ${getStatusColor()} shadow-sm`} />
           </div>
           
           {/* Notification bell */}
-          <button className="relative w-8 h-8 rounded-lg hover:bg-white/5 flex items-center justify-center transition-all border border-transparent hover:border-white/5">
-            <Bell className="w-4 h-4 text-gray-400" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-accent-pink rounded-full"></span>
+          <button 
+            onClick={() => onNavigate?.("notifications")}
+            className={`relative w-8 h-8 rounded-lg flex items-center justify-center transition-all border cursor-pointer ${
+              activeTab === "notifications"
+                ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                : "hover:bg-white/5 border-transparent hover:border-white/5 text-gray-400 hover:text-white"
+            }`}
+            title="Notification Center"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-accent-pink text-[9px] font-bold font-mono text-white flex items-center justify-center shadow-md shadow-accent-pink/40 animate-pulse">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
 
-          {/* User Profile Avatar */}
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-accent-pink p-[1px]">
-            <div className="w-full h-full bg-background-dark rounded-lg flex items-center justify-center overflow-hidden">
-              <img 
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80" 
-                alt="Profile Avatar" 
-                className="w-full h-full object-cover"
-              />
+          {/* User Profile Avatar / Sign In */}
+          {isAuthenticated && user ? (
+            <div className="relative" ref={profileMenuRef}>
+              <button
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                aria-label="User profile menu"
+                className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-400 via-primary to-purple-500 p-[1px] hover:shadow-glow cursor-pointer transition-all"
+              >
+                <div className="w-full h-full bg-background-dark rounded-lg flex items-center justify-center text-xs font-bold text-white font-mono uppercase">
+                  {getInitials(user.full_name)}
+                </div>
+              </button>
+
+              {/* Profile Dropdown Menu */}
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 glass-panel bg-black/90 border border-white/10 rounded-2xl shadow-2xl p-3 space-y-2 z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="p-2 rounded-xl bg-white/[0.03] border border-white/5">
+                    <p className="text-xs font-bold text-white truncate">{user.full_name}</p>
+                    <p className="text-[10px] text-gray-400 font-mono truncate">{user.email}</p>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold uppercase">
+                        {user.role || "Developer"}
+                      </span>
+                      {user.is_email_verified && (
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                          <ShieldCheck className="w-2.5 h-2.5" /> Verified
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-1 space-y-1">
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        onNavigate?.("profile");
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-all text-left cursor-pointer"
+                    >
+                      <User className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Profile & Security</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        onNavigate?.("settings");
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-all text-left cursor-pointer"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-gray-400" />
+                      <span>Workspace Settings</span>
+                    </button>
+                  </div>
+
+                  <div className="pt-1 border-t border-white/5">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all text-left cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <button
+              onClick={() => onNavigate?.("auth")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 text-xs font-mono font-bold cursor-pointer transition-all"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+          )}
+
         </div>
       </div>
     </header>
