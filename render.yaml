@@ -38,7 +38,7 @@ services:
         value: "1"
 
   # ---------------------------------------------------------------------------
-  # 2. React Vite Frontend Static Site
+  # 2. React Vite Frontend Static Site (Global CDN - no region)
   # ---------------------------------------------------------------------------
   - type: web
     name: videosense-frontend
@@ -46,8 +46,6 @@ services:
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
-    plan: free
-    region: oregon
     envVars:
       - key: VITE_API_URL
         fromService:
