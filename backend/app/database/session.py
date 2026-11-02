@@ -2,20 +2,25 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
 
+# Normalize PostgreSQL dialect if provided as postgres:// by cloud providers (Render/Heroku)
+db_url = settings.database.url
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
 # SQLite-specific connection arguments
 connect_args = {}
-if settings.database.url.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
 # Create SQLAlchemy engine
-if settings.database.url.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     engine = create_engine(
-        settings.database.url,
+        db_url,
         connect_args=connect_args,
     )
 else:
     engine = create_engine(
-        settings.database.url,
+        db_url,
         pool_size=settings.database.pool_size,
         max_overflow=settings.database.max_overflow,
     )

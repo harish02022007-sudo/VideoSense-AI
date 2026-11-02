@@ -155,6 +155,8 @@ def load_settings() -> Settings:
         settings_obj = Settings.model_validate(config_data)
         db_env_url = os.getenv("DATABASE_URL")
         if db_env_url:
+            if db_env_url.startswith("postgres://"):
+                db_env_url = db_env_url.replace("postgres://", "postgresql://", 1)
             settings_obj.database.url = db_env_url
         return settings_obj
     except Exception as e:
