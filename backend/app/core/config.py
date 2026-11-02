@@ -13,7 +13,7 @@ class AppSettings(BaseModel):
 
 
 class DatabaseSettings(BaseModel):
-    url: str = "sqlite:///C:/Users/Harish/.gemini/antigravity-ide/scratch/videosense_v2.db"
+    url: str = "sqlite:///./storage/videosense.db"
     pool_size: int = 5
     max_overflow: int = 10
 
@@ -134,9 +134,15 @@ def load_settings() -> Settings:
     # Environment profile resolution (.env override compatible)
     env = os.getenv("VIDEOSENSE_ENV", os.getenv("ENV", "development")).lower()
     
-    # Path to YAML config file
+    # Path to YAML config file (check root configs/ or local backend/configs/)
     config_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "configs"))
     config_path = os.path.join(config_dir, f"{env}.yaml")
+    if not os.path.exists(config_path):
+        config_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "configs"))
+        config_path = os.path.join(config_dir, f"{env}.yaml")
+    if not os.path.exists(config_path):
+        # Fallback to current working directory configs/
+        config_path = os.path.abspath(os.path.join("configs", f"{env}.yaml"))
     
     if not os.path.exists(config_path):
         # Fallback config resolution

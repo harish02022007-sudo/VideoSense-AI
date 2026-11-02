@@ -18,9 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install python packages
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy backend files
+# Copy backend files and configs
 COPY . /app/
 
 # Create required runtime directories

@@ -1,0 +1,55 @@
+app:
+  env: "production"
+  debug: false
+  title: "VideoSense AI"
+  port: 8000
+  host: "0.0.0.0"
+
+database:
+  url: "postgresql://postgres:postgres@localhost:5432/videosense"
+  pool_size: 5
+  max_overflow: 10
+
+logging:
+  level: "INFO"
+  format: "json"
+  save_to_file: false
+  file_path: "./logs/production.log"
+
+storage:
+  upload_dir: "./uploads"
+  output_dir: "./outputs"
+  cache_dir: "./cache"
+  max_file_size_mb: 500
+  allowed_extensions: ["mp4", "avi", "mov", "mkv", "webm"]
+
+models:
+  device: "cpu"  # Cloud container CPU mode (set to "cuda" if running on GPU tier)
+  manager:
+    lazy_load: true
+    unload_inactive_after_sec: 300
+  yolo:
+    model_name: "yolo11n.pt"  # Lightweight nano model for low memory cloud hosting
+    confidence_threshold: 0.30
+  whisper:
+    model_name: "tiny"
+    device: "cpu"
+  ocr:
+    lang: "en"
+    use_gpu: false
+  clip:
+    model_name: "sentence-transformers/clip-ViT-B-32"
+  llm:
+    provider: "mock"
+    local_model_path: "Qwen/Qwen2.5-3B-Instruct"
+    api_key: ""
+    temperature: 0.5
+
+cache:
+  ttl_seconds: 86400
+  enabled: true
+
+embeddings:
+  storage_path: "storage/embeddings"
+  text_model: "sentence-transformers/all-MiniLM-L6-v2"
+  vision_model: "openai/clip-vit-base-patch32"

@@ -51,7 +51,7 @@ services:
         fromService:
           type: web
           name: videosense-backend
-          property: host
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
     routes:
       - type: rewrite
         source: /*
