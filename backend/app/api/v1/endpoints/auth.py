@@ -22,6 +22,7 @@ from app.core.security import (
 )
 from app.services.communication_service import (
     send_email_otp,
+    is_email_configured,
 )
 from app.schemas.auth import (
     RegisterRequest,
@@ -139,7 +140,25 @@ def register_user(
     db.add(otp_record)
     db.commit()
 
-    # 7. Dispatch verification email
+    # 7. Dispatch verification email (or auto-activate if SMTP is not configured)
+    if not is_email_configured():
+        new_user.is_email_verified = True
+        new_user.account_status = "active"
+        db.commit()
+        db.refresh(new_user)
+        logger.info(f"SMTP not configured: Auto-activated account for {new_user.email}")
+        return ResponseEnvelope(
+            success=True,
+            message="Registration successful! Your account is active.",
+            data={
+                "user_id": new_user.id,
+                "email": new_user.email,
+                "username": new_user.username,
+                "verification_required": False,
+            },
+            request_id=req_id,
+        )
+
     email_sent = send_email_otp(new_user.email, otp_code, "email_verification")
     if not email_sent:
         logger.warning(f"Registration email delivery could not be completed for {new_user.email}")
@@ -363,24 +382,31 @@ def login(
 
     # Email verification check
     if not user.is_email_verified:
-        # Auto-dispatch a new code so the user isn't stuck
-        new_code = generate_otp_code(6)
-        hashed_otp = hash_otp(new_code, user.email, "email_verification")
-        otp_record = OTPVerification(
-            identifier=user.email,
-            purpose="email_verification",
-            otp_hash=hashed_otp,
-            expires_at=now + timedelta(minutes=10),
-            resend_available_at=now + timedelta(seconds=60),
-        )
-        db.add(otp_record)
-        db.commit()
-        send_email_otp(user.email, new_code, "email_verification")
+        if not is_email_configured():
+            user.is_email_verified = True
+            user.account_status = "active"
+            db.commit()
+            db.refresh(user)
+            logger.info(f"SMTP not configured: Auto-verified email on login for {user.email}")
+        else:
+            # Auto-dispatch a new code so the user isn't stuck
+            new_code = generate_otp_code(6)
+            hashed_otp = hash_otp(new_code, user.email, "email_verification")
+            otp_record = OTPVerification(
+                identifier=user.email,
+                purpose="email_verification",
+                otp_hash=hashed_otp,
+                expires_at=now + timedelta(minutes=10),
+                resend_available_at=now + timedelta(seconds=60),
+            )
+            db.add(otp_record)
+            db.commit()
+            send_email_otp(user.email, new_code, "email_verification")
 
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="EMAIL_NOT_VERIFIED",
-        )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="EMAIL_NOT_VERIFIED",
+            )
 
     # Success: reset lockout counters
     user.failed_login_attempts = 0

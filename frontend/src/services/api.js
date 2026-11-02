@@ -3,10 +3,27 @@ import axios from "axios";
 // Resolve API Base URL (supports local dev and cloud deployments like Render/Vercel)
 const getInitialBaseUrl = () => {
   if (typeof window !== "undefined") {
+    const isCloudHost = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
     const saved = localStorage.getItem("videosense_backend_url");
-    if (saved) return saved;
+    if (isCloudHost && saved && (saved.includes("localhost") || saved.includes("127.0.0.1"))) {
+      localStorage.removeItem("videosense_backend_url");
+    } else if (saved) {
+      return saved;
+    }
   }
-  let url = (import.meta.env.VITE_API_URL || "http://localhost:8000").trim();
+
+  let url = (import.meta.env.VITE_API_URL || "").trim();
+
+  // If running on a cloud deployment (e.g. Render) and VITE_API_URL was empty at build time,
+  // automatically route to the live Render backend rather than falling back to localhost
+  if (!url) {
+    if (typeof window !== "undefined" && window.location.hostname.includes("onrender.com")) {
+      url = "https://videosense-backend-rayw.onrender.com";
+    } else {
+      url = "http://localhost:8000";
+    }
+  }
+
   if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
     url = `https://${url}`;
   }
