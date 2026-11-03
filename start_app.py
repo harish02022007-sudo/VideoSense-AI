@@ -113,12 +113,19 @@ def stream_tunnel_logs(pipe, color: str):
                 print(f"\n{GREEN}{BOLD}" + "=" * 76 + f"{RESET}")
                 print(f"{GREEN}{BOLD} 🎉 VideoSense AI is LIVE & Accessible Worldwide via Cloudflare Tunnel!{RESET}")
                 print(f"{GREEN}{BOLD}" + "=" * 76 + f"{RESET}")
-                print(f"  {BOLD}🌐 Public Web App:{RESET}      {CYAN}{BOLD}{tunnel_url}{RESET}")
+                print(f"  {BOLD}🌐 NEW Public Web App:{RESET}  {CYAN}{BOLD}{tunnel_url}{RESET}")
                 print(f"  {BOLD}📚 API Swagger Docs:{RESET}    {YELLOW}{tunnel_url}/docs{RESET}")
                 print(f"  {BOLD}🩺 System Health:{RESET}       {GREEN}{tunnel_url}/api/v1/health/{RESET}")
                 print(f"{GREEN}{BOLD}" + "=" * 76 + f"{RESET}")
-                print(f"  {YELLOW}Anyone on mobile, tablet, or PC can access your live demo link!{RESET}")
+                print(f"  {YELLOW}Note: Every restart generates a fresh URL. Previous URLs expire.{RESET}")
+                print(f"  {GREEN}Opening new live URL in your browser automatically...{RESET}")
                 print(f"{GREEN}{BOLD}" + "=" * 76 + f"{RESET}\n")
+
+                try:
+                    import webbrowser
+                    webbrowser.open(tunnel_url)
+                except Exception:
+                    pass
             else:
                 if any(k in clean_line for k in ["Registered tunnel connection", "Connection", "Your quick Tunnel"]):
                     print(f"{color}[TUNNEL]{RESET} {clean_line}")
