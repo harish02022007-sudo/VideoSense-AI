@@ -185,3 +185,4 @@ class SupabaseStorageClient:
 
 # Global singleton instance
 supabase_storage = SupabaseStorageClient()
+

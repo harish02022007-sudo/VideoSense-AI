@@ -53,3 +53,4 @@ def test_supabase_headers():
     assert headers["apikey"] == "my-secret-key"
     assert headers["Content-Type"] == "video/mp4"
     assert headers["x-upsert"] == "true"
+
