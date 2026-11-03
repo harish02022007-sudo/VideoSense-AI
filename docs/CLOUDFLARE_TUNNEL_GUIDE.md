@@ -78,3 +78,4 @@ in the terminal. All servers and the public tunnel will shut down cleanly and se
 1. **Keep Your Laptop Connected to the Internet:** The tunnel requires an active Wi-Fi connection (college Wi-Fi or mobile hotspot).
 2. **Prevent Sleep Mode:** In Windows Settings, set "Screen and Sleep" to "Never" while plugged in so the laptop doesn't go to sleep during your presentation.
 3. **Pre-test Before Entering the Exam Hall:** Run `.\run_tunnel.ps1` 5 minutes before your demo, open the link on your mobile phone, and verify that VideoSense AI loads smoothly!
+

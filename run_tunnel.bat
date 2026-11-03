@@ -9,3 +9,4 @@ if exist ".venv\Scripts\python.exe" (
 ) else (
     python start_app.py --tunnel %*
 )
+

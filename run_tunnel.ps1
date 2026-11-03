@@ -15,3 +15,4 @@ Write-Host " 🚀 VideoSense AI - Starting with Cloudflare Public Tunnel" -Foreg
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 & $PythonExe "$ScriptDir\start_app.py" --tunnel @args
+
