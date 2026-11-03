@@ -14,11 +14,13 @@ const getInitialBaseUrl = () => {
 
   let url = (import.meta.env.VITE_API_URL || "").trim();
 
-  // If running on a cloud deployment (e.g. Render) and VITE_API_URL was empty at build time,
-  // automatically route to the live Render backend rather than falling back to localhost
+  // If running in production (e.g. Oracle Cloud VM or Render) and VITE_API_URL was empty at build time:
   if (!url) {
     if (typeof window !== "undefined" && window.location.hostname.includes("onrender.com")) {
       url = "https://videosense-backend-rayw.onrender.com";
+    } else if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      // In cloud / production (Oracle Cloud VM IP or custom domain), use same origin so Nginx reverse proxy routes all requests cleanly
+      url = window.location.origin;
     } else {
       url = "http://localhost:8000";
     }

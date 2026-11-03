@@ -11,4 +11,3 @@ if (Test-Path "$ScriptDir\.venv\Scripts\python.exe") {
 } else {
     & python "$ScriptDir\start_app.py" @ArgsList
 }
-

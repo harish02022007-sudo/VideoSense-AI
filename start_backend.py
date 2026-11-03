@@ -11,4 +11,3 @@ if __name__ == "__main__":
     if not any(arg in sys.argv for arg in ["--backend", "-b", "--frontend", "-f"]):
         sys.argv.append("--backend")
     main()
-

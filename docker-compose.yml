@@ -1,0 +1,68 @@
+version: "3.8"
+
+# VideoSense AI - Production Multi-Container Stack (Root Compose)
+# Optimized for Oracle Cloud Infrastructure (OCI) Always Free Tier (Ampere A1 ARM64)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: videosense-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-videosense}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: videosense-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      VIDEOSENSE_ENV: production
+      ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-videosense}
+      PORT: 8000
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-videosense_prod_secret_key_2026}
+      VIDEOSENSE_JWT_SECRET: ${VIDEOSENSE_JWT_SECRET:-videosense_jwt_secret_key_2026}
+      DEVICE: cpu
+      LOW_MEMORY_MODE: "false"
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-videosense}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+      - ./storage:/app/storage
+      - model_cache:/home/user/.cache
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: videosense-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  model_cache:

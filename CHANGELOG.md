@@ -27,3 +27,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Interactive timeline player matching playback locations to transcript cues, objects, and OCR lists.
 - **Architecture Documentation**: Added five Architecture Decision Records (ADRs) explaining FastAPI, React + Vite, FAISS, Agentic AI, and Event Bus choices.
 - **DevOps Integrations**: Configured GitHub Actions workflows (`backend-ci`, `frontend-ci`, `docker`, `release`) and multi-stage Dockerfiles.
+
+

@@ -4,16 +4,16 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Memory optimizations for cloud containers (prevent glibc and PyTorch thread memory fragmentation)
+# Performance optimizations for cloud containers & Ampere A1 ARM64 (4 OCPU / 24 GB RAM)
 ENV MALLOC_ARENA_MAX=2
-ENV OMP_NUM_THREADS=1
-ENV MKL_NUM_THREADS=1
-ENV OPENBLAS_NUM_THREADS=1
-ENV TORCH_NUM_THREADS=1
+ENV OMP_NUM_THREADS=4
+ENV MKL_NUM_THREADS=4
+ENV OPENBLAS_NUM_THREADS=4
+ENV TORCH_NUM_THREADS=4
 ENV PYTHONMALLOC=malloc
-ENV LOW_MEMORY_MODE=true
+ENV LOW_MEMORY_MODE=false
 
-# Create non-root user UID 1000 for Hugging Face Spaces & security
+# Create non-root application user UID 1000 for secure container operation
 RUN useradd -m -u 1000 user
 
 WORKDIR /app
@@ -46,7 +46,7 @@ RUN mkdir -p /app/uploads /app/outputs /app/cache /app/storage/embeddings /app/l
 
 USER user
 
-EXPOSE 7860 8000
+EXPOSE 8000
 
-# Entry execution command defaulting to 7860 (Hugging Face Spaces) with fallback to PORT env var
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860} --workers 1"]
+# Entry execution command defaulting to port 8000
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

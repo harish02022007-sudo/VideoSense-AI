@@ -12,6 +12,9 @@ RUN npm run build
 # Stage 2: Production server hosting
 FROM nginx:alpine
 
+# Copy custom reverse proxy & SPA configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Copy built distribution files to default nginx path
 COPY --from=builder /app/dist /usr/share/nginx/html
 

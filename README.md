@@ -1,14 +1,3 @@
----
-title: VideoSense AI Backend
-emoji: 🎥
-colorFrom: blue
-colorTo: indigo
-sdk: gradio
-sdk_version: 4.44.0
-app_file: app.py
-pinned: false
----
-
 # VideoSense AI
 
 An Intelligent Multimodal Video Understanding, Search, Analytics, and Visual Product Discovery Platform.
