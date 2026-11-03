@@ -137,3 +137,4 @@ docker compose up -d --build
 docker stats
 ```
 *(With 4 OCPUs and 24 GB RAM, your system will run smoothly with ample headroom!)*
+

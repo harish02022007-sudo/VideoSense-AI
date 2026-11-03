@@ -167,3 +167,5 @@ summary.zip
 .git_backup/
 
 .git_old/
+cloudflared.exe
+.tools/

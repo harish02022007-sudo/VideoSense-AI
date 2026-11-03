@@ -19,6 +19,7 @@ import sys
 import time
 import signal
 import shutil
+import re
 import argparse
 import subprocess
 import threading
@@ -58,6 +59,71 @@ def get_npm_executable() -> str:
     if not npm_cmd:
         npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     return npm_cmd
+
+
+def get_cloudflared_executable() -> str:
+    """Finds cloudflared in PATH, or in .tools/, or downloads it automatically."""
+    cmd = shutil.which("cloudflared.exe") if os.name == "nt" else shutil.which("cloudflared")
+    if cmd:
+        return cmd
+
+    tools_dir = ROOT_DIR / ".tools"
+    exe_name = "cloudflared.exe" if os.name == "nt" else "cloudflared"
+    local_bin = tools_dir / exe_name
+    if local_bin.exists():
+        return str(local_bin)
+
+    print(f"{CYAN}[TUNNEL] cloudflared not found. Downloading portable binary...{RESET}")
+    tools_dir.mkdir(parents=True, exist_ok=True)
+
+    if os.name == "nt":
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+    elif sys.platform == "darwin":
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64"
+    else:
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+
+    try:
+        import urllib.request
+        urllib.request.urlretrieve(url, str(local_bin))
+        if os.name != "nt":
+            local_bin.chmod(0o755)
+        print(f"{GREEN}[TUNNEL] cloudflared downloaded to {local_bin}{RESET}")
+        return str(local_bin)
+    except Exception as e:
+        print(f"{RED}[ERROR] Could not download cloudflared: {e}{RESET}")
+        return ""
+
+
+def stream_tunnel_logs(pipe, color: str):
+    """Streams tunnel output and prominently announces the public trycloudflare URL."""
+    tunnel_url_announced = False
+    try:
+        for line in iter(pipe.readline, ""):
+            if not line:
+                break
+            clean_line = line.rstrip()
+            if not clean_line:
+                continue
+
+            match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", clean_line)
+            if match and not tunnel_url_announced:
+                tunnel_url = match.group(0)
+                tunnel_url_announced = True
+                print(f"\n{GREEN}{BOLD}" + "=" * 76 + f"{RESET}")
+                print(f"{GREEN}{BOLD} 🎉 VideoSense AI is LIVE & Accessible Worldwide via Cloudflare Tunnel!{RESET}")
+                print(f"{GREEN}{BOLD}" + "=" * 76 + f"{RESET}")
+                print(f"  {BOLD}🌐 Public Web App:{RESET}      {CYAN}{BOLD}{tunnel_url}{RESET}")
+                print(f"  {BOLD}📚 API Swagger Docs:{RESET}    {YELLOW}{tunnel_url}/docs{RESET}")
+                print(f"  {BOLD}🩺 System Health:{RESET}       {GREEN}{tunnel_url}/api/v1/health/{RESET}")
+                print(f"{GREEN}{BOLD}" + "=" * 76 + f"{RESET}")
+                print(f"  {YELLOW}Anyone on mobile, tablet, or PC can access your live demo link!{RESET}")
+                print(f"{GREEN}{BOLD}" + "=" * 76 + f"{RESET}\n")
+            else:
+                if any(k in clean_line for k in ["Registered tunnel connection", "Connection", "Your quick Tunnel"]):
+                    print(f"{color}[TUNNEL]{RESET} {clean_line}")
+    except (ValueError, IOError):
+        pass
 
 
 def print_banner(backend_port: int, frontend_port: int, mode: str):
@@ -152,6 +218,9 @@ def main():
     parser.add_argument(
         "--no-reload", action="store_true", help="Disable Uvicorn auto-reload."
     )
+    parser.add_argument(
+        "--tunnel", "-t", action="store_true", help="Launch Cloudflare Public Demo Tunnel (accessible worldwide)."
+    )
 
     args = parser.parse_args()
 
@@ -244,6 +313,39 @@ def main():
         except Exception as e:
             print(f"{RED}[ERROR] Failed to start frontend: {e}{RESET}")
             sys.exit(1)
+
+    # 3. Start Cloudflare Tunnel (if requested)
+    if args.tunnel:
+        cloudflared_bin = get_cloudflared_executable()
+        if cloudflared_bin:
+            time.sleep(2.0)  # Short pause to let Vite server bind to port
+            target_port = args.frontend_port if mode in ["all", "frontend"] else args.port
+            print(f"{CYAN}[SYSTEM] Launching Cloudflare Tunnel for port {target_port}...{RESET}")
+            tunnel_cmd = [
+                cloudflared_bin, "tunnel",
+                "--url", f"http://localhost:{target_port}"
+            ]
+            try:
+                tunnel_proc = subprocess.Popen(
+                    tunnel_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                    encoding="utf-8",
+                    errors="replace"
+                )
+                processes.append(("TUNNEL", tunnel_proc))
+
+                t_tunnel = threading.Thread(
+                    target=stream_tunnel_logs,
+                    args=(tunnel_proc.stderr, CYAN),
+                    daemon=True
+                )
+                t_tunnel.start()
+                threads.append(t_tunnel)
+            except Exception as e:
+                print(f"{RED}[ERROR] Failed to start Cloudflare Tunnel: {e}{RESET}")
 
     # Monitor processes and handle graceful shutdown
     try:
