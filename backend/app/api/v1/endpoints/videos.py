@@ -320,6 +320,21 @@ async def upload_video(
 
 
 
+    # Upload to Supabase permanent cloud storage if enabled
+    cloud_url = None
+    from app.infrastructure.storage.supabase_storage import supabase_storage
+    if supabase_storage.is_enabled:
+        try:
+            cloud_res = supabase_storage.upload_file(
+                f"{video_id}/original/{filename}",
+                content,
+                file.content_type
+            )
+            if cloud_res.success:
+                cloud_url = cloud_res.value
+        except Exception as sb_err:
+            logger.warning(f"Supabase upload deferred: {sb_err}")
+
     saved_path = save_result.value
 
     # Immediately release raw upload payload from memory
@@ -345,7 +360,7 @@ async def upload_video(
 
                 filename=filename,
 
-                filepath=saved_path,
+                filepath=cloud_url or saved_path,
 
                 mime_type=file.content_type,
 

@@ -4,7 +4,7 @@ import uuid
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Request, HTTPException, Depends
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 
 from app.db.unit_of_work import UnitOfWork
 from app.models.analysis import Object
@@ -15,6 +15,7 @@ from app.core.exceptions import ValidationError
 from app.schemas.common import ResponseEnvelope
 from app.core.config import settings
 from app.infrastructure.storage.path_manager import PathManager
+from app.infrastructure.storage.supabase_storage import supabase_storage
 from app.core.logging import get_logger
 
 logger = get_logger("app.api.analysis")
@@ -26,6 +27,7 @@ async def stream_video(id: str, request: Request):
     """
     Streams the original video file with HTTP Range support for fluid HTML5 seeking,
     bypassing URL encoding and hashtag/emoji filename issues.
+    Automatically redirects to Supabase CDN if cloud storage is enabled.
     """
     with UnitOfWork() as uow:
         video = uow.videos.get(id)
@@ -33,6 +35,15 @@ async def stream_video(id: str, request: Request):
             raise HTTPException(status_code=404, detail=f"Video with ID {id} not found.")
         v_filename = video.filename
         v_filepath = video.filepath
+
+    # 1. Direct Supabase CDN stream redirect if stored URL is cloud URL
+    if v_filepath and v_filepath.startswith("http"):
+        return RedirectResponse(url=v_filepath, status_code=307)
+
+    # 2. Redirect to Supabase CDN if Supabase storage is active
+    if supabase_storage.is_enabled and v_filename:
+        cloud_url = supabase_storage.get_public_url(f"{id}/original/{v_filename}")
+        return RedirectResponse(url=cloud_url, status_code=307)
 
     video_path = PathManager.resolve_video_file(id, v_filename, v_filepath)
     if not video_path or not os.path.exists(video_path):
@@ -92,11 +103,20 @@ async def stream_video(id: str, request: Request):
 
 @router.api_route("/{id}/frames/{frame_id}/image", methods=["GET", "HEAD"])
 async def get_frame_image(id: str, frame_id: str):
-    """Serves the extracted JPEG keyframe image with robust dynamic extraction and fallback."""
+    """Serves the extracted JPEG keyframe image with robust dynamic extraction, Supabase CDN, and fallback."""
     with UnitOfWork() as uow:
         frame = uow.frames.get(frame_id)
         if not frame:
             raise HTTPException(status_code=404, detail=f"Frame {frame_id} not found.")
+
+        # 1. If frame stored filepath is a Supabase cloud CDN URL, redirect directly
+        if frame.filepath and frame.filepath.startswith("http"):
+            return RedirectResponse(url=frame.filepath, status_code=307)
+
+        # 2. If Supabase is enabled, redirect directly to Supabase public CDN URL
+        if supabase_storage.is_enabled:
+            cloud_url = supabase_storage.get_public_url(f"{id}/frames/frame_{frame.frame_number:05d}.jpg")
+            return RedirectResponse(url=cloud_url, status_code=307)
 
         filepath = frame.filepath
         if not filepath or not os.path.exists(filepath):
@@ -145,6 +165,11 @@ async def get_frame_image(id: str, frame_id: str):
 @router.api_route("/{id}/thumbnail", methods=["GET", "HEAD"])
 async def get_video_thumbnail(id: str):
     """Serves the thumbnail/poster image for a video (first keyframe or dynamic capture)."""
+    # 1. Supabase CDN redirect if cloud storage is active
+    if supabase_storage.is_enabled:
+        cloud_url = supabase_storage.get_public_url(f"{id}/thumbnails/thumbnail.jpg")
+        return RedirectResponse(url=cloud_url, status_code=307)
+
     with UnitOfWork() as uow:
         frames = uow.frames.get_by_video_id(id)
         if frames:
@@ -238,11 +263,12 @@ async def get_video_frames(
         for f in frames:
             timestamp_sec = (f.timestamp_offset_ms or 0.0) / 1000.0
             frame_objs = objects_by_frame.get(f.id, [])
+            img_url = f.filepath if (f.filepath and f.filepath.startswith("http")) else f"/api/v1/videos/{id}/frames/{f.id}/image"
             frame_list.append({
                 "id": f.id,
                 "frame_number": f.frame_number,
                 "timestamp": timestamp_sec,
-                "image_url": f"/api/v1/videos/{id}/frames/{f.id}/image",
+                "image_url": img_url,
                 "width": f.width or video.width or 1280,
                 "height": f.height or video.height or 720,
                 "objects_count": len(frame_objs),
@@ -419,7 +445,7 @@ async def get_video_insights(
                 "id": f.id,
                 "frame_number": f.frame_number,
                 "timestamp": (f.timestamp_offset_ms or 0.0) / 1000.0,
-                "image_url": f"/api/v1/videos/{id}/frames/{f.id}/image",
+                "image_url": f.filepath if (f.filepath and f.filepath.startswith("http")) else f"/api/v1/videos/{id}/frames/{f.id}/image",
                 "width": f.width or video.width or 1280,
                 "height": f.height or video.height or 720
             }

@@ -61,6 +61,20 @@ class PathManager:
         if os.path.isfile(preview_file):
             return os.path.abspath(preview_file)
 
+        # 3.5 Check and restore from Supabase cloud storage if enabled
+        try:
+            from app.infrastructure.storage.supabase_storage import supabase_storage
+            if supabase_storage.is_enabled and filename:
+                dest = os.path.join(orig_dir, os.path.basename(filename))
+                if os.path.isfile(dest):
+                    return os.path.abspath(dest)
+                remote_path = f"{video_id}/original/{os.path.basename(filename)}"
+                dl_res = supabase_storage.download_to_disk(remote_path, dest)
+                if dl_res.success:
+                    return os.path.abspath(dest)
+        except Exception:
+            pass
+
         # 4. Search in Sample_Videos repositories
         candidate_dirs = [
             os.path.abspath("Sample_Videos"),

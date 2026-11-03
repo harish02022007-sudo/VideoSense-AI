@@ -97,6 +97,13 @@ class StorageSettings(BaseModel):
     cache_dir: str = "./cache"
 
 
+class SupabaseSettings(BaseModel):
+    url: Optional[str] = None
+    key: Optional[str] = None
+    bucket: str = "videosense"
+    enabled: bool = False
+
+
 class EmbeddingSettings(BaseModel):
     storage_path: str = "storage/embeddings"
     text_model: str = "sentence-transformers/all-MiniLM-L6-v2"
@@ -112,6 +119,7 @@ class Settings(BaseSettings):
     pipeline: PipelineSettings = PipelineSettings()
     providers: AIProviderSettings = AIProviderSettings()
     storage: StorageSettings = StorageSettings()
+    supabase: SupabaseSettings = SupabaseSettings()
     embeddings: EmbeddingSettings = EmbeddingSettings()
 
     class Config:
@@ -171,6 +179,16 @@ def load_settings() -> Settings:
             settings_obj.app.port = int(port_env)
         except Exception:
             pass
+
+    # Supabase Cloud Storage configuration
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    supabase_bucket = os.getenv("SUPABASE_BUCKET", "videosense")
+    if supabase_url and supabase_key:
+        settings_obj.supabase.url = supabase_url.rstrip("/")
+        settings_obj.supabase.key = supabase_key
+        settings_obj.supabase.bucket = supabase_bucket
+        settings_obj.supabase.enabled = True
 
     return settings_obj
 

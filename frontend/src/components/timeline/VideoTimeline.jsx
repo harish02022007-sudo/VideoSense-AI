@@ -74,6 +74,13 @@ export default function VideoTimeline({ videoId, initialSeekTime = null, onClear
     return `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
+  // Resolve image URL (supports absolute CDN URLs from Supabase and relative API URLs)
+  const resolveImageUrl = (url) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    return `${API_BASE_URL}${url}`;
+  };
+
   // Color mapping by detection class
   const getClassStyle = (label) => {
     const l = (label || "").toLowerCase();
@@ -452,7 +459,7 @@ export default function VideoTimeline({ videoId, initialSeekTime = null, onClear
   const handleDownloadKeyframe = () => {
     if (!currentFrame?.image_url) return;
     const a = document.createElement("a");
-    a.href = `${API_BASE_URL}${currentFrame.image_url}`;
+    a.href = resolveImageUrl(currentFrame.image_url);
     a.download = `keyframe_${selectedFrameIndex + 1}_${Math.round(currentFrame.timestamp)}s.jpg`;
     document.body.appendChild(a);
     a.click();
@@ -1021,7 +1028,7 @@ export default function VideoTimeline({ videoId, initialSeekTime = null, onClear
                     <div className="relative inline-block max-h-full max-w-full">
                       {/* Real Keyframe JPEG Image */}
                       <img
-                        src={`${API_BASE_URL}${currentFrame.image_url}`}
+                        src={resolveImageUrl(currentFrame.image_url)}
                         alt={`Keyframe at ${formatTime(currentFrame.timestamp)}`}
                         className="max-h-[450px] w-auto max-w-full object-contain block select-none pointer-events-none rounded-lg shadow-2xl"
                       />
@@ -1190,7 +1197,7 @@ export default function VideoTimeline({ videoId, initialSeekTime = null, onClear
                     {/* Thumbnail */}
                     <div className="aspect-video bg-black flex items-center justify-center overflow-hidden">
                       <img
-                        src={`${API_BASE_URL}${frame.image_url}`}
+                        src={resolveImageUrl(frame.image_url)}
                         alt={`Thumb ${idx + 1}`}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                         loading="lazy"

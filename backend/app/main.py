@@ -119,6 +119,15 @@ async def startup_event() -> None:
     except Exception as rec_err:
         logger.warning(f"Orphaned job recovery deferred: {rec_err}")
 
+    # Verify Supabase Cloud Storage connection if configured
+    try:
+        from app.infrastructure.storage.supabase_storage import supabase_storage
+        if supabase_storage.is_enabled:
+            logger.info("Supabase Cloud Storage active. Checking storage bucket...")
+            supabase_storage.ensure_bucket_exists()
+    except Exception as sb_err:
+        logger.warning(f"Supabase storage startup check deferred: {sb_err}")
+
     # Reclaim startup memory
     gc.collect()
     logger.info("Startup complete - Garbage collection completed")

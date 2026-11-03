@@ -173,7 +173,8 @@ class PipelineService:
             return
   
         frame_paths = frame_res.value
-        # Register Frame rows in database
+        # Register Frame rows in database (and upload to Supabase if configured)
+        from app.infrastructure.storage.supabase_storage import supabase_storage
         with UnitOfWork() as uow:
             for idx, fp in enumerate(frame_paths):
                 # Calculate accurate timestamp offset from extracted frame sequence index
@@ -184,12 +185,19 @@ class PipelineService:
                 except Exception:
                     timestamp_offset = idx * interval * 1000.0
 
+                frame_filepath = fp
+                if supabase_storage.is_enabled:
+                    remote_frame_path = f"{video_id}/frames/{os.path.basename(fp)}"
+                    cloud_upload = supabase_storage.upload_from_disk(fp, remote_frame_path, "image/jpeg")
+                    if cloud_upload.success:
+                        frame_filepath = cloud_upload.value
+
                 frame_entity = Frame(
                     id=str(uuid.uuid4()),
                     video_id=video_id,
                     frame_number=idx + 1,
                     timestamp_offset_ms=timestamp_offset,
-                    filepath=fp,
+                    filepath=frame_filepath,
                     extraction_status="completed",
                     is_keyframe=True
                 )
@@ -672,6 +680,15 @@ class PipelineService:
 
         context.add_artifact("thumbnail", preview_data["thumbnail"])
         context.add_artifact("preview_video", preview_data["preview_video"])
+
+        # Upload generated thumbnail and preview video to Supabase Storage if enabled
+        if supabase_storage.is_enabled:
+            thumb_path = preview_data.get("thumbnail")
+            if thumb_path and os.path.isfile(thumb_path):
+                supabase_storage.upload_from_disk(thumb_path, f"{video_id}/thumbnails/thumbnail.jpg", "image/jpeg")
+            prev_vid = preview_data.get("preview_video")
+            if prev_vid and os.path.isfile(prev_vid):
+                supabase_storage.upload_from_disk(prev_vid, f"{video_id}/analysis/preview.mp4", "video/mp4")
 
         CheckpointManager.save_checkpoint(
             context,
