@@ -144,26 +144,35 @@ def load_settings() -> Settings:
         # Fallback to current working directory configs/
         config_path = os.path.abspath(os.path.join("configs", f"{env}.yaml"))
     
-    if not os.path.exists(config_path):
-        # Fallback config resolution
-        return Settings()
-        
-    try:
-        with open(config_path, "r") as f:
-            config_data = yaml.safe_load(f)
-            
-        settings_obj = Settings.model_validate(config_data)
-        db_env_url = os.getenv("DATABASE_URL")
-        if db_env_url:
-            if db_env_url.startswith("postgres://"):
-                db_env_url = db_env_url.replace("postgres://", "postgresql+psycopg2://", 1)
-            elif db_env_url.startswith("postgresql://") and not db_env_url.startswith("postgresql+"):
-                db_env_url = db_env_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-            settings_obj.database.url = db_env_url
-        return settings_obj
-    except Exception as e:
-        print(f"Error loading configuration from {config_path}: {e}. Loading default Settings.")
-        return Settings()
+    settings_obj = None
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config_data = yaml.safe_load(f)
+            settings_obj = Settings.model_validate(config_data)
+        except Exception as e:
+            print(f"Warning: Could not parse {config_path}: {e}. Falling back to default settings.")
+
+    if settings_obj is None:
+        settings_obj = Settings()
+
+    # Always override database URL and port from environment if provided
+    db_env_url = os.getenv("DATABASE_URL")
+    if db_env_url:
+        if db_env_url.startswith("postgres://"):
+            db_env_url = db_env_url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif db_env_url.startswith("postgresql://") and not db_env_url.startswith("postgresql+"):
+            db_env_url = db_env_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        settings_obj.database.url = db_env_url
+
+    port_env = os.getenv("PORT")
+    if port_env:
+        try:
+            settings_obj.app.port = int(port_env)
+        except Exception:
+            pass
+
+    return settings_obj
 
 
 settings = load_settings()

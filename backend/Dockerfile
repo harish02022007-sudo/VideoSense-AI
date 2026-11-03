@@ -13,11 +13,16 @@ ENV TORCH_NUM_THREADS=1
 ENV PYTHONMALLOC=malloc
 ENV LOW_MEMORY_MODE=true
 
+# Create non-root user UID 1000 for Hugging Face Spaces & security
+RUN useradd -m -u 1000 user
+
 WORKDIR /app
 
 # Install system dependencies for OpenCV, FFmpeg, Tesseract OCR, and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
+    git \
     libgl1 \
     libglib2.0-0 \
     ffmpeg \
@@ -35,10 +40,13 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy backend files and configs
 COPY . /app/
 
-# Create required runtime directories
-RUN mkdir -p /app/uploads /app/outputs /app/cache /app/storage/embeddings
+# Create required runtime directories and set ownership for user 1000
+RUN mkdir -p /app/uploads /app/outputs /app/cache /app/storage/embeddings /app/logs /home/user/.cache && \
+    chown -R user:user /app /home/user
 
-EXPOSE 8000
+USER user
 
-# Entry execution command with single-worker and concurrency limit to keep RAM < 512MB
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --limit-concurrency 10"]
+EXPOSE 7860 8000
+
+# Entry execution command defaulting to 7860 (Hugging Face Spaces) with fallback to PORT env var
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860} --workers 1"]

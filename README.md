@@ -1,3 +1,13 @@
+---
+title: VideoSense AI Backend
+emoji: 🎥
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # VideoSense AI
 
 An Intelligent Multimodal Video Understanding, Search, Analytics, and Visual Product Discovery Platform.
