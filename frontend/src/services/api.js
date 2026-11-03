@@ -1,29 +1,30 @@
 import axios from "axios";
 
-// Resolve API Base URL (supports local dev and cloud deployments like Render/Vercel)
+// Resolve API Base URL (supports local dev, Cloudflare Tunnel, and cloud deployments like Render/Vercel)
 const getInitialBaseUrl = () => {
   if (typeof window !== "undefined") {
     const isCloudHost = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
     const saved = localStorage.getItem("videosense_backend_url");
     if (isCloudHost && saved && (saved.includes("localhost") || saved.includes("127.0.0.1"))) {
       localStorage.removeItem("videosense_backend_url");
-    } else if (saved) {
+    } else if (saved && (!isCloudHost || (!saved.includes("localhost") && !saved.includes("127.0.0.1")))) {
       return saved;
+    }
+
+    // When accessed through Cloudflare Tunnel (*.trycloudflare.com), Oracle Cloud IP, or custom domain:
+    // ALWAYS route API requests through the current origin so Vite/Nginx proxies /api over HTTPS!
+    // This prevents Mixed Content blocks (browser blocking http://localhost from an https:// page).
+    if (isCloudHost) {
+      if (window.location.hostname.includes("onrender.com")) {
+        return "https://videosense-backend-rayw.onrender.com";
+      }
+      return window.location.origin;
     }
   }
 
   let url = (import.meta.env.VITE_API_URL || "").trim();
-
-  // If running in production (e.g. Oracle Cloud VM or Render) and VITE_API_URL was empty at build time:
   if (!url) {
-    if (typeof window !== "undefined" && window.location.hostname.includes("onrender.com")) {
-      url = "https://videosense-backend-rayw.onrender.com";
-    } else if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-      // In cloud / production (Oracle Cloud VM IP or custom domain), use same origin so Nginx reverse proxy routes all requests cleanly
-      url = window.location.origin;
-    } else {
-      url = "http://localhost:8000";
-    }
+    url = "http://localhost:8000";
   }
 
   if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
