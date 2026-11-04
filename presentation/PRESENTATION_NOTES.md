@@ -169,3 +169,4 @@ This document provides the full script, slide breakdown, and anticipated examine
 
 #### Q4: "How does the live Cloudflare demo tunnel work without exposing private data?"
 > **Answer:** *"The Cloudflare Tunnel creates a secure outbound TLS connection from our local laptop daemon (`cloudflared.exe`) to Cloudflare's global edge network. No router ports need to be opened. Incoming HTTPS traffic is reverse-proxied internally to Vite on port 5173 and FastAPI on port 8000. It requires zero cloud subscriptions, zero credit cards, and runs completely on our local machine."*
+

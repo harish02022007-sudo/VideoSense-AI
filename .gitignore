@@ -169,3 +169,6 @@ summary.zip
 .git_old/
 cloudflared.exe
 .tools/
+
+# MS Office temporary lock files
+~$*
