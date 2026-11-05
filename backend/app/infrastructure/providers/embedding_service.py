@@ -1,4 +1,5 @@
 import os
+import glob
 import numpy as np
 from typing import List, Optional
 from PIL import Image
@@ -175,15 +176,40 @@ class EmbeddingService(IEmbeddingService):
         return vector.tolist()
 
     def generate_frame_embedding(self, frame_path: str) -> List[float]:
-        """Generates CLIP vision visual feature vectors."""
-        if not os.path.exists(frame_path):
+        """Generates CLIP vision visual feature vectors with self-healing path resolution."""
+        actual_path = frame_path
+        if not os.path.exists(actual_path):
+            norm_fp = os.path.normpath(frame_path)
+            if "Projects" in norm_fp:
+                cand = norm_fp.replace("Projects\\Sem Project", "Sem Project").replace("Projects/Sem Project", "Sem Project")
+                if os.path.exists(cand):
+                    actual_path = cand
+            if not os.path.exists(actual_path):
+                # Search by relative path or basename in known upload dirs
+                base_name = os.path.basename(frame_path)
+                candidate_roots = [
+                    settings.storage.upload_dir,
+                    os.path.abspath("./uploads"),
+                    os.path.abspath("./backend/uploads"),
+                ]
+                for r in candidate_roots:
+                    cand_file = os.path.join(r, base_name)
+                    if os.path.exists(cand_file):
+                        actual_path = cand_file
+                        break
+                    matches = glob.glob(os.path.join(r, "*", "frames", base_name))
+                    if matches and os.path.exists(matches[0]):
+                        actual_path = matches[0]
+                        break
+
+        if not os.path.exists(actual_path):
             logger.warning(f"Frame file not found at: {frame_path}. Returning zero vector.")
             dim = self.get_dimension("FRAME")
             return [0.0] * dim
 
         model = self._get_vision_model()
         try:
-            with Image.open(frame_path) as img:
+            with Image.open(actual_path) as img:
                 # Convert palette/RGBA images to RGB
                 if img.mode != "RGB":
                     img = img.convert("RGB")

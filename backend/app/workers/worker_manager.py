@@ -107,7 +107,18 @@ class WorkerManager:
                         config
                     )
                 except Exception as e:
-                    logger.error(f"Pipeline service execute exception: {str(e)}")
+                    logger.error(f"Pipeline service execute exception: {str(e)}", exc_info=True)
+                    try:
+                        with UnitOfWork() as uow:
+                            job = uow.jobs.get(job_id)
+                            if job and job.status not in ("completed", "failed"):
+                                job.status = "failed"
+                                job.failure_reason = f"Pipeline execution crashed: {str(e)}"
+                                job.error_message = str(e)
+                                job.completed_at = datetime.utcnow()
+                            uow.commit()
+                    except Exception as db_err:
+                        logger.error(f"Failed to update failed job state: {db_err}")
 
                 # Reset worker status to idle
                 with UnitOfWork() as uow:

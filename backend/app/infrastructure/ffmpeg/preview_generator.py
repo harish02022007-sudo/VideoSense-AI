@@ -95,7 +95,9 @@ class FFmpegPreviewGenerator(IPreviewGenerator):
 
         preview_details = {
             "thumbnail": f"/uploads/{video_id}/thumbnails/thumbnail.jpg",
+            "thumbnail_path": thumbnail_jpg,
             "preview_video": f"/uploads/{video_id}/analysis/preview.mp4" if os.path.exists(preview_mp4) else f"/uploads/{video_id}/video.mp4",
+            "preview_video_path": preview_mp4 if os.path.exists(preview_mp4) else video_path,
             "duration": 5.0
         }
         return Result.Success(preview_details)

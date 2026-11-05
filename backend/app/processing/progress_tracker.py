@@ -13,8 +13,9 @@ class ProgressTracker:
         PipelineStage.SCENE_DETECTION: 55,
         PipelineStage.OCR: 70,
         PipelineStage.SPEECH: 82,
-        PipelineStage.OBJECT_DETECTION: 94,
-        PipelineStage.FACE_DETECTION: 96,
+        PipelineStage.OBJECT_DETECTION: 90,
+        PipelineStage.FACE_DETECTION: 93,
+        PipelineStage.PREVIEW_GENERATION: 96,
         PipelineStage.EMBEDDING_GENERATION: 98,
         PipelineStage.COMPLETED: 100
     }

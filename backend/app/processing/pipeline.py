@@ -19,6 +19,8 @@ from app.models.analysis import Video, Job, Frame, OCRResult, Transcript, Scene,
 from app.models.pipeline import PipelineExecution
 from app.models.embedding import VideoEmbedding
 from app.workers.embedding_worker import EmbeddingWorker
+from app.infrastructure.storage.path_manager import PathManager
+from app.infrastructure.storage.supabase_storage import supabase_storage
 
 logger = get_logger("app.processing.pipeline")
 
@@ -89,6 +91,16 @@ class PipelineService:
             video_path = video.filepath
             video_user_id = video.user_id
             video_filename = video.filename
+
+        # Robustly resolve video path to existing absolute path on disk
+        resolved_video_path = PathManager.resolve_video_file(video_id, video_filename, video_path)
+        if resolved_video_path and os.path.exists(resolved_video_path):
+            video_path = resolved_video_path
+        elif not os.path.exists(video_path):
+            PipelineErrorHandler.handle_stage_failure(
+                context, PipelineStage.METADATA, 1, "VIDEO_NOT_FOUND", f"Video file not found on disk at: {video_path}"
+            )
+            return
 
         # Emit pipeline started event
         try:
@@ -273,12 +285,12 @@ class PipelineService:
                     id=str(uuid.uuid4()),
                     video_id=video_id,
                     filepath=audio_wav,
-                sample_rate=16000,
-                channels=1
-            )
-            uow.audio.add(audio_entity)
-            context.add_artifact("audio", audio_wav)
-            uow.commit()
+                    sample_rate=16000,
+                    channels=1
+                )
+                uow.audio.add(audio_entity)
+                context.add_artifact("audio", audio_wav)
+                uow.commit()
 
         else:
             logger.info(f"No audio file generated for video {video_id}. Skipping audio database entry.")
@@ -509,7 +521,7 @@ class PipelineService:
             metadata={"transcripts_count": len(speech_list)}
         )
 
-        if not os.path.exists(audio_wav):
+        if not audio_wav or not os.path.exists(audio_wav):
             cls.create_processing_log(
                 video_id,
                 job_id,
@@ -722,10 +734,10 @@ class PipelineService:
 
         # Upload generated thumbnail and preview video to Supabase Storage if enabled
         if supabase_storage.is_enabled:
-            thumb_path = preview_data.get("thumbnail")
+            thumb_path = preview_data.get("thumbnail_path") or os.path.join(settings.storage.upload_dir, video_id, "thumbnails", "thumbnail.jpg")
             if thumb_path and os.path.isfile(thumb_path):
                 supabase_storage.upload_from_disk(thumb_path, f"{video_id}/thumbnails/thumbnail.jpg", "image/jpeg")
-            prev_vid = preview_data.get("preview_video")
+            prev_vid = preview_data.get("preview_video_path") or os.path.join(settings.storage.upload_dir, video_id, "analysis", "preview.mp4")
             if prev_vid and os.path.isfile(prev_vid):
                 supabase_storage.upload_from_disk(prev_vid, f"{video_id}/analysis/preview.mp4", "video/mp4")
 
