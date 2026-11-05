@@ -39,11 +39,32 @@ class EasyOCRService(IOCRService):
         self._engine = "none"  # "tesseract" | "easyocr" | "fallback"
 
     def initialize(self, lang_list: List[str] = ["en"]) -> Result[None]:
-        """Loads the most memory-efficient OCR engine available."""
+        """Loads the most memory-efficient OCR engine available with workspace-anchored weights."""
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_dir = os.path.abspath(os.path.join(curr_dir, "..", "..", ".."))
+        root_dir = os.path.abspath(os.path.join(backend_dir, ".."))
+
+        # Resolve local workspace models directory to avoid Windows user profile permission issues
+        target_model_dir = None
+        for d in [
+            os.path.join(backend_dir, "models", "easyocr"),
+            os.path.join(root_dir, "models", "easyocr"),
+            os.path.join(backend_dir, "models"),
+        ]:
+            if os.path.exists(os.path.join(d, "craft_mlt_25k.pth")):
+                target_model_dir = d
+                break
+
+        if not target_model_dir:
+            target_model_dir = os.path.join(backend_dir, "models", "easyocr")
+            os.makedirs(target_model_dir, exist_ok=True)
+
+        user_net_dir = os.path.join(target_model_dir, "user_network")
+        os.makedirs(user_net_dir, exist_ok=True)
+
         # 1. Attempt ultra-lightweight Tesseract first (~20MB RAM, ideal for 512MB cloud free tier)
         try:
             import pytesseract
-            # Verify tesseract binary responds
             ver = pytesseract.get_tesseract_version()
             self._engine = "tesseract"
             self._initialized = True
@@ -52,41 +73,56 @@ class EasyOCRService(IOCRService):
         except Exception as tess_err:
             logger.debug(f"Tesseract OCR not available: {tess_err}")
 
-        # 2. Check if we are running in low-memory environment where EasyOCR (>450MB) would crash container
+        # 2. Check if running in strict low-memory cloud container (<500MB available)
         is_low_mem = _is_low_memory_environment()
         try:
             available_mb = psutil.virtual_memory().available / (1024 * 1024)
         except Exception:
             available_mb = 1000
 
-        if is_low_mem or available_mb < 500:
+        if is_low_mem and available_mb < 400:
             logger.warn(
-                f"Memory-constrained environment detected ({available_mb:.1f}MB available, low_mem={is_low_mem}). "
-                f"Bypassing heavyweight PyTorch EasyOCR to avoid OOM killer; using adaptive scene text extractor."
+                f"Memory-constrained cloud container ({available_mb:.1f}MB available). Using adaptive scene text extractor."
             )
             self._engine = "fallback"
             self._initialized = True
             return Result.Success(None)
 
-        # 3. Standard Localhost environment with ample RAM: Load EasyOCR Reader
+        # 3. Load EasyOCR Reader with isolated workspace paths
         try:
             import easyocr
-            logger.info(f"Loading EasyOCR reader for languages: {lang_list}")
-            self.reader = easyocr.Reader(lang_list, gpu=False)
+            logger.info(f"Loading EasyOCR reader (languages={lang_list}) from {target_model_dir}")
+            self.reader = easyocr.Reader(
+                lang_list,
+                gpu=False,
+                model_storage_directory=target_model_dir,
+                user_network_directory=user_net_dir,
+                download_enabled=False
+            )
             self._engine = "easyocr"
             self._initialized = True
             logger.info("EasyOCR reader initialized successfully.")
             return Result.Success(None)
-        except ImportError:
-            logger.warn("easyocr library not installed. Falling back to adaptive OCR mode.")
-            self._engine = "fallback"
-            self._initialized = True
-            return Result.Success(None)
-        except Exception as e:
-            logger.warn(f"EasyOCR reader load exception ({e}). Falling back to adaptive OCR mode.")
-            self._engine = "fallback"
-            self._initialized = True
-            return Result.Success(None)
+        except Exception as first_err:
+            logger.debug(f"Direct offline EasyOCR load note: {first_err}. Attempting with download enabled...")
+            try:
+                import easyocr
+                self.reader = easyocr.Reader(
+                    lang_list,
+                    gpu=False,
+                    model_storage_directory=target_model_dir,
+                    user_network_directory=user_net_dir,
+                    download_enabled=True
+                )
+                self._engine = "easyocr"
+                self._initialized = True
+                logger.info("EasyOCR reader initialized successfully with download fallback.")
+                return Result.Success(None)
+            except Exception as e:
+                logger.warn(f"EasyOCR reader load exception ({e}). Falling back to adaptive OCR mode.")
+                self._engine = "fallback"
+                self._initialized = True
+                return Result.Success(None)
 
     def extract_text(self, frame_paths: List[str]) -> Result[List[Any]]:
         """Extracts text overlays from video keyframes with adaptive memory limits."""
@@ -96,15 +132,25 @@ class EasyOCRService(IOCRService):
         if not frame_paths:
             return Result.Success([])
 
-        # Subsample frames for OCR: text overlays rarely change second-by-second.
-        # Sampling up to 10-12 keyframes achieves 100% text coverage while reducing RAM churn by 80%.
+        # Dynamic frame sampling for OCR: ensures high coverage while maintaining low RAM churn
         total_frames = len(frame_paths)
-        if total_frames > 12:
-            step = max(1, total_frames // 10)
-            sampled_indices = list(range(0, total_frames, step))[:12]
+        is_low_mem = _is_low_memory_environment()
+        if is_low_mem:
+            step = max(1, total_frames // 12)
+            sampled_indices = list(range(0, total_frames, step))[:15]
+            target_items = [(idx, frame_paths[idx]) for idx in sampled_indices]
+        elif total_frames <= 30:
+            # Process all frames for short clips (under 30s)
+            target_items = list(enumerate(frame_paths))
+        elif total_frames <= 100:
+            # Sample every 2nd keyframe for videos up to 100 frames (50 frames total)
+            sampled_indices = list(range(0, total_frames, 2))
             target_items = [(idx, frame_paths[idx]) for idx in sampled_indices]
         else:
-            target_items = list(enumerate(frame_paths))
+            # Sample every 3rd keyframe for longer videos
+            step = max(2, total_frames // 60)
+            sampled_indices = list(range(0, total_frames, step))[:60]
+            target_items = [(idx, frame_paths[idx]) for idx in sampled_indices]
 
         logger.info(f"Running OCR text scan ({self._engine}) on {len(target_items)} sampled frames (out of {total_frames}).")
 
@@ -141,7 +187,7 @@ class EasyOCRService(IOCRService):
                         except (ValueError, TypeError):
                             conf_num = -1.0
 
-                        if conf_num >= 35.0 and len(word) >= 2:
+                        if conf_num >= 30.0 and len(word) >= 2:
                             x = float(data["left"][j]) / scale
                             y = float(data["top"][j]) / scale
                             bw = float(data["width"][j]) / scale
@@ -149,6 +195,7 @@ class EasyOCRService(IOCRService):
 
                             ocr_records.append({
                                 "frame_path": fp,
+                                "frame_basename": os.path.basename(fp),
                                 "text": word,
                                 "confidence": round(conf_num / 100.0, 4),
                                 "box_x_min": round(x, 2),
@@ -169,7 +216,7 @@ class EasyOCRService(IOCRService):
                 logger.warn(f"Tesseract extraction error: {e}. Falling back to adaptive OCR.")
 
         # -------------------------------------------------------------
-        # ENGINE 2: EASYOCR (Deep Neural, Downscaled for Low Memory)
+        # ENGINE 2: EASYOCR (Deep Neural, High-Accuracy Scene Recognition)
         # -------------------------------------------------------------
         if self._engine == "easyocr" and self.reader is not None:
             try:
@@ -182,10 +229,9 @@ class EasyOCRService(IOCRService):
                     if img is None:
                         continue
 
-                    # Downscale frame so max dimension is at most 640px.
-                    # This reduces CRAFT tensor memory from 300MB down to ~35MB!
+                    # Maintain high resolution (up to 1280px) so small text, signage, and packaging labels are sharp
                     h, w = img.shape[:2]
-                    max_dim = 640
+                    max_dim = 1280
                     scale = 1.0
                     if max(h, w) > max_dim:
                         scale = max_dim / float(max(h, w))
@@ -193,14 +239,15 @@ class EasyOCRService(IOCRService):
                     else:
                         resized = img
 
-                    # Run inference under inference_mode with compact canvas size
                     try:
                         with torch.inference_mode():
                             results = self.reader.readtext(
                                 resized,
-                                canvas_size=640,
-                                mag_ratio=1.0,
-                                quantize=True,
+                                canvas_size=1280,
+                                mag_ratio=1.2,
+                                min_size=8,
+                                text_threshold=0.25,
+                                low_text=0.25,
                                 batch_size=1
                             )
                     except Exception as inf_err:
@@ -209,7 +256,8 @@ class EasyOCRService(IOCRService):
 
                     for bbox, text, conf in results:
                         text_str = str(text).strip()
-                        if not text_str:
+                        # Accept valid text fragments with at least 2 chars and reasonable confidence
+                        if not text_str or len(text_str) < 2 or float(conf) < 0.15:
                             continue
                         # Rescale bounding box coordinates back to original image size
                         b_x_min = float(bbox[0][0]) / scale
@@ -219,6 +267,7 @@ class EasyOCRService(IOCRService):
 
                         ocr_records.append({
                             "frame_path": fp,
+                            "frame_basename": os.path.basename(fp),
                             "text": text_str,
                             "confidence": round(float(conf), 4),
                             "box_x_min": round(b_x_min, 2),
@@ -230,7 +279,13 @@ class EasyOCRService(IOCRService):
                         })
 
                     del img, resized, results
-                    gc.collect()
+                    if (i + 1) % 5 == 0:
+                        gc.collect()
+
+                logger.info(f"EasyOCR extracted {len(ocr_records)} text regions across {len(target_items)} frames.")
+                return Result.Success(ocr_records)
+            except Exception as e:
+                logger.warn(f"EasyOCR execution exception ({e}). Falling back to adaptive OCR.")
 
                 logger.info(f"EasyOCR extracted {len(ocr_records)} text regions across {len(target_items)} frames.")
                 return Result.Success(ocr_records)

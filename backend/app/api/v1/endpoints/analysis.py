@@ -119,12 +119,30 @@ async def get_frame_image(id: str, frame_id: str):
             return RedirectResponse(url=cloud_url, status_code=307)
 
         filepath = frame.filepath
+        if filepath and not os.path.exists(filepath) and "Projects" in filepath:
+            fixed_cand = filepath.replace("Projects\\Sem Project", "Sem Project").replace("Projects/Sem Project", "Sem Project")
+            if os.path.exists(fixed_cand):
+                filepath = fixed_cand
+
         if not filepath or not os.path.exists(filepath):
-            base_dir = os.path.abspath(settings.storage.upload_dir)
-            frame_file = os.path.join(base_dir, id, "frames", f"frame_{frame.frame_number:05d}.jpg")
-            if os.path.exists(frame_file):
-                filepath = frame_file
-            else:
+            curr_dir = os.path.dirname(os.path.abspath(__file__))
+            candidate_dirs = [
+                os.path.abspath(settings.storage.upload_dir),
+                os.path.abspath(os.path.join(curr_dir, "..", "..", "..", "uploads")),
+                os.path.abspath("./uploads"),
+                os.path.abspath("./backend/uploads"),
+            ]
+            frame_file = None
+            for bdir in candidate_dirs:
+                ff = os.path.join(bdir, id, "frames", f"frame_{frame.frame_number:05d}.jpg")
+                if os.path.exists(ff):
+                    filepath = ff
+                    frame_file = ff
+                    break
+            if not frame_file:
+                frame_file = os.path.join(candidate_dirs[0], id, "frames", f"frame_{frame.frame_number:05d}.jpg")
+
+            if not filepath or not os.path.exists(filepath):
                 # Dynamic keyframe extraction fallback from video
                 video = uow.videos.get(id)
                 v_path = PathManager.resolve_video_file(id, video.filename if video else None, video.filepath if video else None)

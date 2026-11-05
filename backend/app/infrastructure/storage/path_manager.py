@@ -39,27 +39,40 @@ class PathManager:
         from Sample_Videos or other backup sources.
         """
         # 1. Direct explicit filepath check
-        if filepath and os.path.isfile(filepath):
-            return os.path.abspath(filepath)
+        if filepath:
+            if os.path.isfile(filepath):
+                return os.path.abspath(filepath)
+            # Auto-heal paths if workspace was relocated from an older folder
+            norm_fp = os.path.normpath(filepath)
+            if "Projects" in norm_fp:
+                fixed_fp = norm_fp.replace("Projects\\Sem Project", "Sem Project").replace("Projects/Sem Project", "Sem Project")
+                if os.path.isfile(fixed_fp):
+                    return os.path.abspath(fixed_fp)
 
-        base_dir = os.path.abspath(settings.storage.upload_dir)
+        # 2. Check all potential uploads directories
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
+        candidate_upload_dirs = [
+            os.path.abspath(settings.storage.upload_dir),
+            os.path.abspath(os.path.join(curr_dir, "..", "..", "..", "uploads")),
+            os.path.abspath(os.path.join(curr_dir, "..", "..", "..", "..", "uploads")),
+            os.path.abspath("./uploads"),
+            os.path.abspath("./backend/uploads"),
+        ]
 
-        # 2. Check uploads/{video_id}/original/*.*
-        orig_dir = os.path.join(base_dir, video_id, "original")
-        if os.path.isdir(orig_dir):
-            if filename:
-                exact_file = os.path.join(orig_dir, os.path.basename(filename))
-                if os.path.isfile(exact_file):
-                    return os.path.abspath(exact_file)
-            else:
+        for base_dir in candidate_upload_dirs:
+            orig_dir = os.path.join(base_dir, video_id, "original")
+            if os.path.isdir(orig_dir):
+                if filename:
+                    exact_file = os.path.join(orig_dir, os.path.basename(filename))
+                    if os.path.isfile(exact_file):
+                        return os.path.abspath(exact_file)
                 matches = glob.glob(os.path.join(orig_dir, "*.*"))
                 if matches and os.path.isfile(matches[0]):
                     return os.path.abspath(matches[0])
 
-        # 3. Check uploads/{video_id}/analysis/preview.mp4
-        preview_file = os.path.join(base_dir, video_id, "analysis", "preview.mp4")
-        if os.path.isfile(preview_file):
-            return os.path.abspath(preview_file)
+            preview_file = os.path.join(base_dir, video_id, "analysis", "preview.mp4")
+            if os.path.isfile(preview_file):
+                return os.path.abspath(preview_file)
 
         # 3.5 Check and restore from Supabase cloud storage if enabled
         try:

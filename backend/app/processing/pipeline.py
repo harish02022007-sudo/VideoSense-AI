@@ -393,12 +393,33 @@ class PipelineService:
         )
         
         with UnitOfWork() as uow:
-            # Map ocr frame path back to saved frame entity ID
+            # Build comprehensive multi-key frame map (by full path, basename, normalized path, and sequence name)
             db_frames = uow.frames.get_by_video_id(video_id)
-            frame_map = {f.filepath: f.id for f in db_frames}
-            
+            frame_map = {}
+            frame_time_map = {}
+            for f in db_frames:
+                f_time = (f.timestamp_offset_ms or 0.0) / 1000.0
+                if f.filepath:
+                    frame_map[f.filepath] = f.id
+                    frame_map[os.path.normpath(f.filepath)] = f.id
+                    frame_map[os.path.basename(f.filepath)] = f.id
+                    frame_time_map[f.filepath] = f_time
+                    frame_time_map[os.path.normpath(f.filepath)] = f_time
+                    frame_time_map[os.path.basename(f.filepath)] = f_time
+                seq_name = f"frame_{f.frame_number:05d}.jpg"
+                frame_map[seq_name] = f.id
+                frame_time_map[seq_name] = f_time
+
             for o in ocr_list:
-                frame_id = frame_map.get(o["frame_path"])
+                fp = o.get("frame_path", "")
+                base = o.get("frame_basename") or os.path.basename(fp)
+                frame_id = (
+                    frame_map.get(fp)
+                    or frame_map.get(base)
+                    or (frame_map.get(os.path.normpath(fp)) if fp else None)
+                )
+                frame_ts = frame_time_map.get(fp) or frame_time_map.get(base) or o.get("frame_timestamp", 0.0)
+
                 ocr_entity = OCRResult(
                     id=str(uuid.uuid4()),
                     video_id=video_id,
@@ -410,7 +431,7 @@ class PipelineService:
                     box_x_max=o["box_x_max"],
                     box_y_max=o["box_y_max"],
                     language=o["language"],
-                    frame_timestamp=o["frame_timestamp"]
+                    frame_timestamp=frame_ts
                 )
                 uow.ocr_results.add(ocr_entity)
             uow.commit()
@@ -576,14 +597,32 @@ class PipelineService:
                 except Exception:
                     pass
         with UnitOfWork() as uow:
-            # Map object frame path back to saved frame entity ID
+            # Build comprehensive multi-key frame map (by full path, basename, normalized path, and sequence name)
             db_frames = uow.frames.get_by_video_id(video_id)
-            frame_map = {f.filepath: f.id for f in db_frames}
-            frame_time_map = {f.filepath: ((f.timestamp_offset_ms or 0.0) / 1000.0) for f in db_frames}
-            
+            frame_map = {}
+            frame_time_map = {}
+            for f in db_frames:
+                f_time = (f.timestamp_offset_ms or 0.0) / 1000.0
+                if f.filepath:
+                    frame_map[f.filepath] = f.id
+                    frame_map[os.path.normpath(f.filepath)] = f.id
+                    frame_map[os.path.basename(f.filepath)] = f.id
+                    frame_time_map[f.filepath] = f_time
+                    frame_time_map[os.path.normpath(f.filepath)] = f_time
+                    frame_time_map[os.path.basename(f.filepath)] = f_time
+                seq_name = f"frame_{f.frame_number:05d}.jpg"
+                frame_map[seq_name] = f.id
+                frame_time_map[seq_name] = f_time
+
             for obj in objects_list:
-                frame_id = frame_map.get(obj["frame_path"])
-                frame_ts = frame_time_map.get(obj["frame_path"], 0.0)
+                fp = obj.get("frame_path", "")
+                base = obj.get("frame_basename") or os.path.basename(fp)
+                frame_id = (
+                    frame_map.get(fp)
+                    or frame_map.get(base)
+                    or (frame_map.get(os.path.normpath(fp)) if fp else None)
+                )
+                frame_ts = frame_time_map.get(fp) or frame_time_map.get(base) or 0.0
                 obj_ts = obj.get("first_seen_timestamp") or frame_ts
                 if obj_ts == 0.0 and frame_ts > 0.0:
                     obj_ts = frame_ts

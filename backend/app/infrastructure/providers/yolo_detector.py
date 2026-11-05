@@ -18,11 +18,11 @@ class YoloObjectDetector(IObjectDetector):
         self.model = None
         self._initialized = False
         self.weights_path = weights_path
-        self.conf_threshold = 0.25
+        self.conf_threshold = 0.18
         self.iou_threshold = 0.45
 
     def _resolve_default_weights(self) -> str:
-        """Finds the active custom model in ModelRegistry or falls back to local/nano weights."""
+        """Finds the active custom model in ModelRegistry or falls back to local medium/nano weights."""
         if self.weights_path and os.path.exists(self.weights_path):
             return self.weights_path
 
@@ -59,8 +59,8 @@ class YoloObjectDetector(IObjectDetector):
         except Exception as e:
             logger.debug(f"Could not resolve weights from ModelRegistry: {e}")
 
-        # Check for local weights files
-        for name in ["yolo11n.pt", "yolo11m.pt"]:
+        # Check for local weights files: prioritize accurate YOLOv11m over nano
+        for name in ["yolo11m.pt", "yolo11n.pt"]:
             p1 = os.path.join(backend_dir, "models", "weights", name)
             if os.path.exists(p1):
                 return p1
@@ -68,7 +68,7 @@ class YoloObjectDetector(IObjectDetector):
             if os.path.exists(p2):
                 return p2
 
-        return "yolo11n.pt"
+        return "yolo11m.pt"
 
     def initialize(self, model_name: Optional[str] = None) -> Result[None]:
         """Loads the YOLO model parameters."""
@@ -105,22 +105,29 @@ class YoloObjectDetector(IObjectDetector):
             if not init_res.success and self.model is None:
                 return Result.Failure("Failed to initialize YOLO detector.")
 
-        # Subsample frames if there are many to conserve CPU and RAM
+        # Dynamic frame subsampling: ensures comprehensive object coverage across the whole video
         total_frames = len(frame_paths)
-        if total_frames > 15:
+        is_low_mem = os.getenv("LOW_MEMORY_MODE", "").lower() in ("true", "1", "yes")
+        if is_low_mem:
             step = max(1, total_frames // 12)
             target_paths = [frame_paths[idx] for idx in range(0, total_frames, step)][:15]
-        else:
+        elif total_frames <= 60:
+            # Process all keyframes for videos up to 60s (no frames skipped)
             target_paths = frame_paths
+        elif total_frames <= 150:
+            # Sample every frame or at least 75 frames for videos up to 2.5 minutes
+            target_paths = frame_paths
+        else:
+            step = max(1, total_frames // 120)
+            target_paths = [frame_paths[idx] for idx in range(0, total_frames, step)][:120]
 
-        logger.info(f"Running YOLO detection on {len(target_paths)} sampled frames (out of {total_frames}).")
+        logger.info(f"Running YOLO detection on {len(target_paths)} frames (out of {total_frames} total keyframes).")
 
         if self.model is None:
             return Result.Success([])
 
         try:
             import torch
-            is_low_mem = os.getenv("LOW_MEMORY_MODE", "").lower() in ("true", "1", "yes")
             img_size = 480 if is_low_mem else 640
 
             detections = []
@@ -152,11 +159,12 @@ class YoloObjectDetector(IObjectDetector):
                         width = xyxy[2] - xyxy[0]
                         height = xyxy[3] - xyxy[1]
 
-                        if width < 15 or height < 15:
+                        if width < 8 or height < 8:
                             continue
 
                         detections.append({
                             "frame_path": fp,
+                            "frame_basename": os.path.basename(fp),
                             "class_label": class_label,
                             "confidence": round(confidence, 4),
                             "box_x_min": round(xyxy[0], 2),
